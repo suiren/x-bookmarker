@@ -31,7 +31,7 @@ Advanced bookmark management application for X (Twitter) with intelligent catego
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/suiren/x-bookmarker.git
 cd x-bookmarker
 ```
 
@@ -88,16 +88,42 @@ STORAGE_PATH=./storage
 - `npm run docker:up` - Start Docker services
 - `npm run db:migrate` - Run database migrations
 
+## Development Status
+
+### ✅ 完了した機能
+- **Task 1**: プロジェクト環境構築・設定ファイル作成
+  - 完全な開発環境設定（Docker, TypeScript, ESLint）
+  - モノレポ構成の確立
+  - 全開発スクリプトの動作確認
+
+- **Task 2**: 共有ライブラリ（@x-bookmarker/shared）実装
+  - Zodスキーマによる型安全なバリデーション
+  - 完全なAPI型定義
+  - TypeScript/ESLintエラー0状態
+
+### 🚧 進行中
+- **Task 3**: データベースマイグレーション・シード機能実装
+- **Task 4**: 認証・セキュリティ基盤実装
+- **Task 5**: X API統合サービス実装
+
 ## Project Structure
 
 ```
 x-bookmarker/
 ├── packages/
 │   ├── backend/          # Express API server
+│   │   ├── src/database/ # Database migrations & seeds
+│   │   └── package.json
 │   ├── frontend/         # React application
+│   │   └── package.json
 │   └── shared/           # Shared types and utilities
+│       ├── src/schemas/  # Zod validation schemas
+│       ├── src/types/    # TypeScript interfaces
+│       └── src/utils/    # Utility functions
 ├── docker-compose.yml    # Development environment
-└── README.md
+├── design.md            # Technical specifications
+├── requirements.md      # Project requirements
+└── Task.md             # Implementation roadmap
 ```
 
 ## License
