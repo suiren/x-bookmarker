@@ -1,6 +1,27 @@
+/**
+ * レート制限ミドルウェア
+ * 
+ * 💡 レート制限とは:
+ * 一定時間内のリクエスト数を制限してサーバーを保護する仕組み
+ * - DoS攻撃の防止
+ * - リソースの公平な利用
+ * - 外部API制限への対応
+ * 
+ * 実装方式:
+ * - スライディングウィンドウ方式
+ * - Redis/メモリベースのカウンター
+ * - ユーザー・IP別の制限
+ * 
+ * X API制限への対応:
+ * - 75 requests / 15分の制限
+ * - 指数バックオフでリトライ
+ * - 優雅な制限処理
+ */
+
 import { Request, Response, NextFunction } from 'express';
 import { RateLimitConfig } from '@x-bookmarker/shared';
 import { createClient, RedisClientType } from 'redis';
+import { config } from '../config';
 
 interface RateLimitStore {
   increment(key: string): Promise<{ count: number; resetTime: Date }>;
@@ -167,8 +188,30 @@ export const rateLimitConfigs = {
   } as RateLimitConfig,
 };
 
-// Create rate limiter instances
-const redisUrl = process.env.REDIS_URL;
+/**
+ * レート制限設定の初期化
+ * 
+ * 💡 設定の考慮事項:
+ * - 一般API: 通常の使用に十分な制限
+ * - 認証API: 厳しい制限でブルートフォース攻撃を防止
+ * - X API: 外部API制限に合わせた保守的な設定
+ * - 機密操作: 非常に厳しい制限
+ */
+function createRedisUrl(): string | undefined {
+  if (config.redis.password) {
+    return `redis://:${config.redis.password}@${config.redis.host}:${config.redis.port}`;
+  } else {
+    return `redis://${config.redis.host}:${config.redis.port}`;
+  }
+}
+
+const redisUrl = createRedisUrl();
+console.log(`🔧 レート制限設定:`);
+console.log(`  - Redis URL: ${redisUrl ? 'configured' : 'not configured (using memory)'}`);
+console.log(`  - API制限: ${rateLimitConfigs.api.maxRequests}req/${rateLimitConfigs.api.windowMs/60000}min`);
+console.log(`  - 認証制限: ${rateLimitConfigs.auth.maxRequests}req/${rateLimitConfigs.auth.windowMs/60000}min`);
+console.log(`  - X API制限: ${rateLimitConfigs.xApi.maxRequests}req/${rateLimitConfigs.xApi.windowMs/60000}min`);
+
 const limiters = {
   api: new RateLimiter(rateLimitConfigs.api, redisUrl),
   auth: new RateLimiter(rateLimitConfigs.auth, redisUrl),

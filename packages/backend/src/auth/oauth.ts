@@ -1,3 +1,24 @@
+/**
+ * X (Twitter) OAuth 2.0 認証サービス
+ * 
+ * 💡 OAuth 2.0とは:
+ * アプリケーションが第三者の代わりにリソースにアクセスするための標準
+ * - 認証コード付与フロー（Authorization Code Grant）
+ * - PKCE（Proof Key for Code Exchange）でセキュリティ強化
+ * - リフレッシュトークンでの継続アクセス
+ * 
+ * X API OAuth 2.0の特徴:
+ * - スコープベースの権限制御
+ * - 短期間のアクセストークン
+ * - 長期間のリフレッシュトークン
+ * - レート制限の厳格な管理
+ * 
+ * セキュリティ対策:
+ * - state パラメータでCSRF攻撃防止
+ * - PKCE でコード インターセプト攻撃防止
+ * - 暗号化された状態管理
+ */
+
 import axios from 'axios';
 import crypto from 'crypto';
 import {
@@ -6,6 +27,7 @@ import {
   XTokenResponse,
   XTokenResponseSchema,
 } from '@x-bookmarker/shared';
+import { config } from '../config';
 
 interface OAuthConfig {
   clientId: string;
@@ -26,64 +48,120 @@ class OAuthService {
   private readonly AUTHORIZATION_URL = 'https://twitter.com/i/oauth2/authorize';
   private readonly TOKEN_URL = 'https://api.twitter.com/2/oauth2/token';
   private readonly USER_INFO_URL = 'https://api.twitter.com/2/users/me';
+  private readonly REVOKE_URL = 'https://api.twitter.com/2/oauth2/revoke';
+  
+  // PKCEコードのセキュアな保存用（本番環境ではRedisを使用）
+  private codeVerifierStore = new Map<string, { verifier: string; timestamp: number }>();
 
   constructor() {
     this.config = {
-      clientId: process.env.X_CLIENT_ID || '',
-      clientSecret: process.env.X_CLIENT_SECRET || '',
-      redirectUri:
-        process.env.X_REDIRECT_URI || 'http://localhost:3000/auth/x/callback',
-      encryptionKey:
-        process.env.OAUTH_ENCRYPTION_KEY ||
-        'default-encryption-key-change-in-production',
+      clientId: config.x.clientId,
+      clientSecret: config.x.clientSecret,
+      redirectUri: config.x.callbackUrl,
+      encryptionKey: process.env.OAUTH_ENCRYPTION_KEY || 'x-bookmarker-oauth-key-change-in-production',
     };
 
     this.validateConfig();
-  }
-
-  private validateConfig(): void {
-    if (!this.config.clientId) {
-      throw new Error('X_CLIENT_ID environment variable is required');
-    }
-    if (!this.config.clientSecret) {
-      throw new Error('X_CLIENT_SECRET environment variable is required');
-    }
-    if (!this.config.redirectUri) {
-      throw new Error('X_REDIRECT_URI environment variable is required');
-    }
-    if (
-      this.config.encryptionKey ===
-      'default-encryption-key-change-in-production'
-    ) {
-      console.warn(
-        '⚠️  Using default OAuth encryption key. Set OAUTH_ENCRYPTION_KEY in production.'
-      );
-    }
+    this.setupCleanup();
+    console.log('🔐 X OAuth 2.0 サービスを初期化しました');
   }
 
   /**
-   * Generate OAuth authorization URL
+   * 設定の検証
+   * 
+   * 💡 OAuth設定の重要性:
+   * - クライアントID: アプリケーションの識別子
+   * - クライアントシークレット: 機密情報（サーバーのみ）
+   * - リダイレクトURI: セキュリティのために事前登録が必要
    */
-  generateAuthUrl(redirectUrl: string = '/'): string {
+  private validateConfig(): void {
+    const missingFields: string[] = [];
+    
+    if (!this.config.clientId) missingFields.push('X_CLIENT_ID');
+    if (!this.config.clientSecret) missingFields.push('X_CLIENT_SECRET');
+    if (!this.config.redirectUri) missingFields.push('X_CALLBACK_URL');
+    
+    if (missingFields.length > 0) {
+      throw new Error(`必須のX OAuth設定が不足しています: ${missingFields.join(', ')}`);
+    }
+    
+    if (this.config.encryptionKey === 'x-bookmarker-oauth-key-change-in-production') {
+      if (config.env === 'production') {
+        throw new Error('本番環境ではOAUTH_ENCRYPTION_KEYを設定してください');
+      } else {
+        console.warn('⚠️ デフォルトのOAuth暗号化キーを使用中（開発環境のみ）');
+      }
+    }
+
+    console.log('🔧 X OAuth設定:');
+    console.log(`  - クライアントID: ${this.config.clientId.substring(0, 8)}...`);
+    console.log(`  - リダイレクトURI: ${this.config.redirectUri}`);
+  }
+
+  /**
+   * 古いコードベリファイアのクリーンアップ
+   */
+  private setupCleanup(): void {
+    // 10分毎に古いコードベリファイアを削除
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, data] of this.codeVerifierStore.entries()) {
+        if (now - data.timestamp > 10 * 60 * 1000) {
+          this.codeVerifierStore.delete(key);
+        }
+      }
+    }, 10 * 60 * 1000);
+  }
+
+  /**
+   * OAuth認証URLの生成
+   * 
+   * 💡 OAuth認証フローのステップ1:
+   * 1. ユーザーをX認証ページにリダイレクト
+   * 2. stateパラメータでCSRF攻撃を防止
+   * 3. PKCEでコードインターセプト攻撃を防止
+   * 4. 必要なスコープを指定
+   * 
+   * @param redirectUrl - 認証後のリダイレクト先
+   * @param userId - ユーザーID（オプション、ログ用）
+   */
+  generateAuthUrl(redirectUrl: string = '/', userId?: string): string {
+    console.log(`🔗 OAuth認証URL生成中: redirect=${redirectUrl}, user=${userId || 'anonymous'}`);
+    
+    // セキュアなランダム値でstateを生成
+    const nonce = crypto.randomBytes(32).toString('hex');
     const state = this.encryptState({
       redirectUrl,
       timestamp: Date.now(),
-      nonce: crypto.randomBytes(16).toString('hex'),
+      nonce,
+      userId, // ユーザーIDを含める（オプション）
     });
 
-    const codeChallenge = this.generateCodeChallenge();
+    // PKCEチャレンジとベリファイアを生成
+    const { codeChallenge, challengeId } = this.generateCodeChallenge();
+
+    // X APIで必要なスコープを指定
+    const scopes = [
+      'tweet.read',      // ツイート読み取り
+      'users.read',      // ユーザー情報読み取り
+      'bookmark.read',   // ブックマーク読み取り
+      'offline.access'   // リフレッシュトークン取得
+    ];
 
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.config.clientId,
       redirect_uri: this.config.redirectUri,
-      scope: 'tweet.read users.read bookmark.read offline.access',
+      scope: scopes.join(' '),
       state,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
     });
 
-    return `${this.AUTHORIZATION_URL}?${params.toString()}`;
+    const authUrl = `${this.AUTHORIZATION_URL}?${params.toString()}`;
+    console.log(`✅ OAuth認証URL生成完了: challenge_id=${challengeId}`);
+    
+    return authUrl;
   }
 
   /**
@@ -261,25 +339,58 @@ class OAuthService {
   }
 
   /**
-   * Generate PKCE code challenge
+   * PKCEコードチャレンジの生成
+   * 
+   * 💡 PKCE（Proof Key for Code Exchange）とは:
+   * OAuth 2.0の拡張仕様で、認証コードの傍受攻撃を防ぐ
+   * 1. ランダムなcode_verifierを生成
+   * 2. SHA256でハッシュ化してcode_challengeを作成
+   * 3. 認証時にはcode_challenge、トークン交換時にはcode_verifierを使用
    */
-  private generateCodeChallenge(): string {
-    const codeVerifier = crypto.randomBytes(32).toString('base64url');
-    // Store code verifier (in production, use Redis or secure storage)
-    process.env._CODE_VERIFIER = codeVerifier;
-
-    return crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+  private generateCodeChallenge(): { codeChallenge: string; challengeId: string } {
+    // セキュアなランダム値でコードベリファイアを生成（43-128文字）
+    const codeVerifier = crypto.randomBytes(64).toString('base64url');
+    
+    // SHA256でハッシュ化してチャレンジを作成
+    const codeChallenge = crypto
+      .createHash('sha256')
+      .update(codeVerifier)
+      .digest('base64url');
+    
+    // ユニークなIDでベリファイアを保存
+    const challengeId = crypto.randomBytes(16).toString('hex');
+    this.codeVerifierStore.set(challengeId, {
+      verifier: codeVerifier,
+      timestamp: Date.now()
+    });
+    
+    console.log(`🔑 PKCEチャレンジ生成: id=${challengeId}`);
+    
+    return { codeChallenge, challengeId };
   }
 
   /**
-   * Get PKCE code verifier
+   * PKCEコードベリファイアの取得
+   * 
+   * @param challengeId - チャレンジID
    */
-  private getCodeVerifier(): string {
-    const codeVerifier = process.env._CODE_VERIFIER;
-    if (!codeVerifier) {
-      throw new Error('Code verifier not found');
+  private getCodeVerifier(challengeId: string): string {
+    const stored = this.codeVerifierStore.get(challengeId);
+    
+    if (!stored) {
+      throw new Error('Code verifier not found or expired');
     }
-    return codeVerifier;
+    
+    // 使用済みのベリファイアを削除（ワンタイム使用）
+    this.codeVerifierStore.delete(challengeId);
+    
+    // 10分以内のもののみ有効
+    if (Date.now() - stored.timestamp > 10 * 60 * 1000) {
+      throw new Error('Code verifier expired');
+    }
+    
+    console.log(`🔓 PKCEベリファイア取得: id=${challengeId}`);
+    return stored.verifier;
   }
 
   /**

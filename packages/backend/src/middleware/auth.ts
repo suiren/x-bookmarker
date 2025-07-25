@@ -1,31 +1,70 @@
+/**
+ * Express認証ミドルウェア
+ * 
+ * 💡 ミドルウェアとは:
+ * リクエストとレスポンスの間で実行される関数
+ * - リクエストの前処理
+ * - 認証・認可のチェック
+ * - ログ記録
+ * - エラーハンドリング
+ * 
+ * セキュリティのベストプラクティス:
+ * - トークンの適切な検証
+ * - 詳細なエラー情報の非公開
+ * - レート制限の実装
+ * - セッションのセキュア管理
+ */
+
 import { Request, Response, NextFunction } from 'express';
 import { JWTPayload } from '@x-bookmarker/shared';
 import { jwtService } from '../auth/jwt';
 import { sessionService } from '../auth/session';
 
-// Extend Express Request type to include user info
+// Express Request型を拡張してユーザー情報を追加
 declare global {
   namespace Express {
     interface Request {
       user?: JWTPayload;
       sessionId?: string;
+      authMethod?: 'jwt' | 'session';
+      clientIp?: string;
+      userAgent?: string;
     }
   }
 }
 
 /**
- * JWT Authentication Middleware
- * Verifies JWT token from Authorization header
+ * JWT認証ミドルウェア
+ * 
+ * 💡 JWT認証の流れ:
+ * 1. Authorizationヘッダーからトークンを抽出
+ * 2. "Bearer "プレフィックスを除去
+ * 3. トークンの署名と有効期限を検証
+ * 4. ペイロードをリクエストオブジェクトに追加
+ * 
+ * セキュリティ考慮事項:
+ * - トークンの改ざん検出
+ * - 有効期限の厳密なチェック
+ * - エラー情報の適切な制限
  */
 export const authenticateJWT = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
+  const startTime = Date.now();
+  
   try {
+    // クライアント情報の記録（セキュリティログ用）
+    req.clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+    req.userAgent = req.headers['user-agent'] || 'unknown';
+    
+    console.log(`🔐 JWT認証開始: ${req.method} ${req.path} from ${req.clientIp}`);
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
+      console.log('❌ 認証ヘッダーなし');
       res.status(401).json({
         success: false,
         error: 'Authorization header required',
@@ -34,9 +73,21 @@ export const authenticateJWT = async (
       return;
     }
 
-    const token = authHeader.split(' ')[1]; // Remove 'Bearer ' prefix
+    // Bearer トークンの形式チェック
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+      console.log('❌ 無効な認証ヘッダー形式');
+      res.status(401).json({
+        success: false,
+        error: 'Invalid authorization header format',
+        code: 'INVALID_AUTH_FORMAT',
+      });
+      return;
+    }
 
+    const token = parts[1];
     if (!token) {
+      console.log('❌ トークンなし');
       res.status(401).json({
         success: false,
         error: 'Bearer token required',
@@ -46,22 +97,40 @@ export const authenticateJWT = async (
     }
 
     try {
+      // トークン検証
       const payload = jwtService.verifyToken(token);
+      
+      // リクエストオブジェクトにユーザー情報を追加
       req.user = payload;
+      req.authMethod = 'jwt';
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ JWT認証成功: user=${payload.userId} (${duration}ms)`);
+      
       next();
     } catch (error) {
+      const duration = Date.now() - startTime;
+      
+      // エラーの種類に応じた詳細なログ記録
       let errorCode = 'INVALID_TOKEN';
       let errorMessage = 'Invalid token';
+      let logLevel = '❌';
 
       if (error instanceof Error) {
         if (error.message === 'Token expired') {
           errorCode = 'TOKEN_EXPIRED';
           errorMessage = 'Token expired';
+          logLevel = '⏰';
         } else if (error.message === 'Token not active') {
           errorCode = 'TOKEN_NOT_ACTIVE';
           errorMessage = 'Token not active';
+        } else if (error.message === 'Invalid token') {
+          errorCode = 'INVALID_TOKEN';
+          errorMessage = 'Invalid token';
         }
       }
+
+      console.log(`${logLevel} JWT認証失敗: ${errorMessage} from ${req.clientIp} (${duration}ms)`);
 
       res.status(401).json({
         success: false,
@@ -71,7 +140,9 @@ export const authenticateJWT = async (
       return;
     }
   } catch (error) {
-    console.error('❌ JWT Authentication Error:', error);
+    const duration = Date.now() - startTime;
+    console.error(`❌ JWT認証エラー (${duration}ms):`, error);
+    
     res.status(500).json({
       success: false,
       error: 'Internal server error',
