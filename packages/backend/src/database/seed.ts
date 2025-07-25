@@ -1,5 +1,15 @@
-import { Pool } from 'pg';
+/**
+ * データベースシード機能
+ * 
+ * 💡 シードとは:
+ * 開発やテストで使用する初期データを自動挿入する機能
+ * - デモユーザーの作成
+ * - サンプルブックマークの挿入
+ * - デフォルトカテゴリの確認
+ */
+
 import { migrate } from './migrate';
+import { query, withTransaction } from './connection';
 
 interface SeedResult {
   success: boolean;
@@ -7,49 +17,38 @@ interface SeedResult {
   error?: string;
 }
 
-// Database connection pool (shared with migrate.ts)
-let pool: Pool;
-
-const getPool = (): Pool => {
-  if (!pool) {
-    pool = new Pool({
-      host: process.env.DATABASE_HOST || 'localhost',
-      port: parseInt(process.env.DATABASE_PORT || '5432'),
-      database: process.env.DATABASE_NAME || 'x_bookmarker',
-      user: process.env.DATABASE_USER || 'x_bookmarker',
-      password: process.env.DATABASE_PASSWORD || 'x_bookmarker_dev',
-      ssl: process.env.DATABASE_SSL === 'true',
-      max: parseInt(process.env.DATABASE_POOL_SIZE || '10'),
-    });
-  }
-  return pool;
-};
-
-// Check if database needs seeding
+/**
+ * シード実行の必要性をチェック
+ * 
+ * 💡 ユーザーが存在しない場合のみシード実行
+ */
 const checkSeedStatus = async (): Promise<boolean> => {
-  const client = getPool();
-
   try {
-    // Check if any users exist
-    const userCount = await client.query('SELECT COUNT(*) FROM users');
-    return parseInt(userCount.rows[0].count) === 0;
+    const userCount = await query<{ count: string }>('SELECT COUNT(*) FROM users');
+    const count = parseInt(userCount.rows[0].count);
+    
+    console.log(`👥 現在のユーザー数: ${count}`);
+    return count === 0;
   } catch (error) {
-    console.log('📊 Database tables not found, migrations needed');
+    console.log('📊 データベーステーブルが見つかりません。マイグレーションが必要です');
     return true;
   }
 };
 
-// Create a demo user for development
+/**
+ * デモユーザーの作成
+ * 
+ * 💡 デモユーザー作成時にトリガーが自動実行され、
+ * デフォルトカテゴリが自動で作成されます
+ */
 const createDemoUser = async (): Promise<string> => {
-  const client = getPool();
-
   const demoUser = {
     x_user_id: 'demo_user_123456',
     username: 'demo_user',
     display_name: 'Demo User',
     access_token: 'demo_access_token',
     refresh_token: 'demo_refresh_token',
-    token_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+    token_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7日後
     settings: {
       theme: 'light',
       viewMode: 'grid',
@@ -59,7 +58,9 @@ const createDemoUser = async (): Promise<string> => {
     },
   };
 
-  const result = await client.query(
+  console.log('👤 デモユーザーを作成中...');
+
+  const result = await query<{ id: string }>(
     `
     INSERT INTO users (
       x_user_id, username, display_name, access_token, 
@@ -79,16 +80,21 @@ const createDemoUser = async (): Promise<string> => {
     ]
   );
 
-  console.log('👤 Created demo user:', demoUser.username);
+  console.log(`✅ デモユーザー作成完了: ${demoUser.username} (ID: ${result.rows[0].id})`);
   return result.rows[0].id;
 };
 
-// Create demo bookmarks for the demo user
+/**
+ * デモブックマークの作成
+ * 
+ * 💡 各カテゴリにサンプルブックマークを配置して、
+ * ユーザーがシステムを理解しやすくします
+ */
 const createDemoBookmarks = async (userId: string): Promise<void> => {
-  const client = getPool();
+  console.log('📋 デモブックマークを作成中...');
 
-  // Get categories for the user
-  const categoriesResult = await client.query(
+  // ユーザーのカテゴリを取得
+  const categoriesResult = await query<{ id: string; name: string }>(
     'SELECT id, name FROM categories WHERE user_id = $1',
     [userId]
   );
@@ -100,6 +106,8 @@ const createDemoBookmarks = async (userId: string): Promise<void> => {
     },
     {} as Record<string, string>
   );
+
+  console.log('📁 利用可能なカテゴリ:', Object.keys(categories));
 
   const demoBookmarks = [
     {
@@ -137,105 +145,136 @@ const createDemoBookmarks = async (userId: string): Promise<void> => {
     },
   ];
 
-  for (const bookmark of demoBookmarks) {
-    await client.query(
-      `
-      INSERT INTO bookmarks (
-        user_id, x_tweet_id, content, author_username, author_display_name,
-        category_id, tags, hashtags, bookmarked_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `,
-      [
-        userId,
-        bookmark.x_tweet_id,
-        bookmark.content,
-        bookmark.author_username,
-        bookmark.author_display_name,
-        bookmark.category_id,
-        bookmark.tags,
-        bookmark.hashtags,
-        bookmark.bookmarked_at,
-      ]
-    );
-  }
+  // トランザクション内でブックマークを一括作成
+  await withTransaction(async (client) => {
+    for (const bookmark of demoBookmarks) {
+      await client.query(
+        `
+        INSERT INTO bookmarks (
+          user_id, x_tweet_id, content, author_username, author_display_name,
+          category_id, tags, hashtags, bookmarked_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `,
+        [
+          userId,
+          bookmark.x_tweet_id,
+          bookmark.content,
+          bookmark.author_username,
+          bookmark.author_display_name,
+          bookmark.category_id,
+          bookmark.tags,
+          bookmark.hashtags,
+          bookmark.bookmarked_at,
+        ]
+      );
+      console.log(`  ✅ 作成完了: ${bookmark.content.substring(0, 50)}...`);
+    }
+  });
 
-  console.log(`📋 Created ${demoBookmarks.length} demo bookmarks`);
+  console.log(`🎯 ${demoBookmarks.length}個のデモブックマークを作成しました`);
 };
 
-// Main seed function
+/**
+ * メインシード実行関数
+ * 
+ * 💡 実行手順:
+ * 1. マイグレーション状態の確認・実行
+ * 2. シード実行の必要性判定
+ * 3. デモユーザー作成（自動でカテゴリ作成）
+ * 4. デモブックマーク作成
+ */
 export const seedDatabase = async (): Promise<SeedResult> => {
+  console.log('🌱 データベースシード処理を開始します...');
+  
   try {
-    // First, ensure migrations are up to date
-    console.log('📋 Checking migration status...');
+    // 1. マイグレーション状態確認
+    console.log('📋 マイグレーション状態を確認中...');
     const migrationResult = await migrate();
 
     if (!migrationResult.success) {
       return {
         success: false,
-        message: 'Migration failed',
+        message: 'マイグレーション実行に失敗しました',
         error: migrationResult.error,
       };
     }
 
-    // Check if seeding is needed
+    if (migrationResult.migrationsRun > 0) {
+      console.log(`✅ ${migrationResult.migrationsRun}個のマイグレーションを実行しました`);
+    }
+
+    // 2. シード実行の必要性判定
     const needsSeeding = await checkSeedStatus();
 
     if (!needsSeeding) {
       return {
         success: true,
-        message: 'Database already contains data, skipping seed',
+        message: 'データベースに既にデータが存在するため、シードをスキップしました',
       };
     }
 
-    console.log('🌱 Starting database seeding...');
+    console.log('🎯 データベースシードを実行します...');
 
-    // Create demo user (this will trigger default categories creation)
+    // 3. デモユーザー作成（トリガーでカテゴリも自動作成）
     const userId = await createDemoUser();
 
-    // Wait a moment for the trigger to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // トリガー実行の完了を待機
+    console.log('⏳ デフォルトカテゴリの作成を待機中...');
+    await new Promise(resolve => setTimeout(resolve, 200));
 
-    // Create demo bookmarks
+    // カテゴリ作成の確認
+    const categoryResult = await query<{ count: string }>(
+      'SELECT COUNT(*) FROM categories WHERE user_id = $1',
+      [userId]
+    );
+    console.log(`📁 ${categoryResult.rows[0].count}個のカテゴリが作成されました`);
+
+    // 4. デモブックマーク作成
     await createDemoBookmarks(userId);
 
-    console.log('🎉 Database seeding completed successfully');
+    console.log('🎉 データベースシードが正常に完了しました！');
 
     return {
       success: true,
-      message: 'Database seeded successfully with demo data',
+      message: 'デモデータを含むデータベースシードが正常に完了しました',
     };
   } catch (error) {
-    console.error('❌ Seeding failed:', error);
+    console.error('❌ シード処理中にエラーが発生しました:', error);
     return {
       success: false,
-      message: 'Database seeding failed',
+      message: 'データベースシード処理に失敗しました',
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 };
 
-// Close database connection
-export const closeConnection = async (): Promise<void> => {
-  if (pool) {
-    await pool.end();
-  }
-};
-
-// CLI runner
+/**
+ * CLI実行時のエントリーポイント
+ * 
+ * 💡 使用方法:
+ * npm run db:seed または tsx src/database/seed.ts
+ */
 if (require.main === module) {
   seedDatabase()
     .then(result => {
-      console.log(result.message);
+      console.log(`\n📊 結果: ${result.message}`);
       if (result.success) {
+        console.log('🎉 シード処理が正常に完了しました！');
         process.exit(0);
       } else {
-        console.error('Error:', result.error);
+        console.error('❌ エラー:', result.error);
         process.exit(1);
       }
     })
     .catch(error => {
-      console.error('❌ Seed error:', error);
+      console.error('❌ シード実行エラー:', error);
       process.exit(1);
+    })
+    .finally(() => {
+      // データベース接続のクリーンアップ
+      import('./connection').then(({ closeDatabase }) => {
+        closeDatabase().catch(console.error);
+      });
     });
 }
