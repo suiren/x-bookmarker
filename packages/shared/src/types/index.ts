@@ -14,7 +14,6 @@ export interface User {
   updatedAt: Date;
 }
 
-
 export interface Bookmark {
   id: string;
   userId: string;
@@ -58,7 +57,6 @@ export interface Tag {
   createdAt: Date;
   updatedAt: Date;
 }
-
 
 export interface SearchResult {
   bookmarks: Bookmark[];

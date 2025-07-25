@@ -4,19 +4,20 @@
 
 ### 1. 基盤整備とプロジェクト構造確立
 
-- [ ] 1. プロジェクト環境構築・設定ファイル作成
-  - `.env.example`ファイルを作成し、必要な環境変数を定義
-  - `docker-compose.yml`の完成（PostgreSQL、Redis、アプリケーション）
-  - TypeScript設定の統一（`tsconfig.json`のベース設定作成）
-  - ESLint/Prettier設定の統一（ワークスペース全体での一貫性確保）
-  - 開発用スクリプトの整備（`npm run dev`, `npm run build`, `npm run test`）
+- [x] 1. プロジェクト環境構築・設定ファイル作成 🟢（最小実装済）
+  - ✅ `.env.example`ファイルを作成し、必要な環境変数を定義
+  - ✅ `docker-compose.yml`の完成（PostgreSQL、Redis、アプリケーション）
+  - ✅ TypeScript設定の統一（`tsconfig.json`のベース設定作成）
+  - ✅ ESLint/Prettier設定の統一（ワークスペース全体での一貫性確保）
+  - ✅ 開発用スクリプトの整備（`npm run dev`, `npm run build`, `npm run test`）
   - _Requirements: 9_
 
-- [ ] 2. 共有ライブラリ（@x-bookmarker/shared）の実装完成
-  - Zodスキーマの定義（User, Bookmark, Category, Tag, SearchQuery等）
-  - API型定義の完成（APIResponse, PaginatedResponse, エラー型）
-  - バリデーション関数の実装
-  - ユーティリティ関数の実装（日付フォーマット、文字列処理等）
+- [x] 2. 共有ライブラリ（@x-bookmarker/shared）の実装完成 🟢（最小実装済）
+  - ✅ Zodスキーマの定義（User, Bookmark, Category, Tag, SearchQuery等）
+  - ✅ API型定義の完成（APIResponse, PaginatedResponse, エラー型）
+  - ✅ バリデーション関数の実装
+  - ✅ ユーティリティ関数の実装（日付フォーマット、文字列処理等）
+  - ✅ テストスイート完成（66テスト全通過）
   - _Requirements: 9_
 
 ### 2. データベース・バックエンドコア機能

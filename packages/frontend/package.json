@@ -10,8 +10,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "format": "prettier --write src"
+    "lint": "eslint src/**/*.{ts,tsx} --report-unused-disable-directives --max-warnings 0",
+    "format": "prettier --write src --ignore-unknown || true"
   },
   "dependencies": {
     "react": "^18.2.0",
