@@ -1,18 +1,18 @@
 // Re-export types from shared package for convenience
 export * from '@x-bookmarker/shared';
 
-// Additional frontend-specific types
-export interface User {
+// Frontend-specific types (excludes userId, uses string for dates)
+export interface FrontendUser {
   id: string;
   username: string;
   displayName: string;
   avatarUrl?: string;
-  settings: UserSettings;
+  settings: FrontendUserSettings;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface UserSettings {
+export interface FrontendUserSettings {
   theme: 'light' | 'dark' | 'system';
   viewMode: 'grid' | 'list';
   defaultCategory?: string;
@@ -20,7 +20,7 @@ export interface UserSettings {
   aiSuggestions: boolean;
 }
 
-export interface Bookmark {
+export interface FrontendBookmark {
   id: string;
   xTweetId: string;
   content: string;
@@ -39,7 +39,7 @@ export interface Bookmark {
   updatedAt: string;
 }
 
-export interface Category {
+export interface FrontendCategory {
   id: string;
   name: string;
   description?: string;
@@ -52,7 +52,7 @@ export interface Category {
   updatedAt: string;
 }
 
-export interface Tag {
+export interface FrontendTag {
   id: string;
   name: string;
   color?: string;
@@ -61,33 +61,7 @@ export interface Tag {
   updatedAt: string;
 }
 
-export interface SearchQuery {
-  text?: string;
-  categoryIds?: string[];
-  tags?: string[];
-  authorUsername?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  hasMedia?: boolean;
-  hasLinks?: boolean;
-  sortBy: 'relevance' | 'date' | 'author';
-  sortOrder: 'asc' | 'desc';
-  limit: number;
-  offset: number;
-}
-
-export interface SearchResult {
-  bookmarks: Bookmark[];
-  totalCount: number;
-  facets: {
-    categories: { id: string; name: string; count: number }[];
-    tags: { name: string; count: number }[];
-    authors: { username: string; displayName: string; count: number }[];
-  };
-  queryTime: number;
-}
-
-export interface SyncJob {
+export interface FrontendSyncJob {
   id: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   progress: number;
