@@ -6,6 +6,11 @@ jest.mock('pg', () => ({
   Pool: jest.fn().mockImplementation(() => ({
     query: jest.fn(),
     end: jest.fn(),
+    connect: jest.fn().mockResolvedValue({
+      query: jest.fn(),
+      release: jest.fn(),
+    }),
+    on: jest.fn(),
   })),
 }));
 
@@ -13,6 +18,20 @@ jest.mock('pg', () => ({
 jest.mock('fs/promises', () => ({
   readdir: jest.fn(),
   readFile: jest.fn(),
+}));
+
+// Mock config module
+jest.mock('../config', () => ({
+  config: {
+    database: {
+      host: 'localhost',
+      port: 5432,
+      name: 'test_db',
+      user: 'test_user',
+      password: 'test_password',
+    },
+    env: 'test',
+  },
 }));
 
 describe('Database Migration (Unit Tests)', () => {
@@ -25,9 +44,16 @@ describe('Database Migration (Unit Tests)', () => {
 
     // Setup pool mock
     mockQuery = jest.fn();
+    const mockConnect = jest.fn().mockResolvedValue({
+      query: mockQuery,
+      release: jest.fn(),
+    });
+    
     mockPool = {
       query: mockQuery,
       end: jest.fn(),
+      connect: mockConnect,
+      on: jest.fn(),
     };
 
     // Mock Pool constructor
