@@ -48,27 +48,28 @@
 
 ### 3. コアAPI・データ管理機能
 
-- [ ] 6. ブックマーク管理API実装
-  - `GET /bookmarks` - ユーザーブックマーク一覧取得
-  - `POST /bookmarks` - 新規ブックマーク作成
-  - `PUT /bookmarks/:id` - ブックマーク更新
-  - `DELETE /bookmarks/:id` - ブックマーク削除
-  - `GET /categories` - カテゴリ一覧取得
-  - `POST /categories` - カテゴリ作成（色・アイコン・階層対応）
-  - `PUT /categories/:id` - カテゴリ編集
-  - `DELETE /categories/:id` - カテゴリ削除
-  - `PUT /categories/order` - カテゴリ並び順変更
-  - `POST /bookmarks/bulk` - 一括操作API（複数選択・移動）
+- [x] 6. ブックマーク管理API実装 ✅️（リファクタリング済）
+  - ✅ `GET /bookmarks` - ユーザーブックマーク一覧取得
+  - ✅ `POST /bookmarks` - 新規ブックマーク作成
+  - ✅ `PUT /bookmarks/:id` - ブックマーク更新
+  - ✅ `DELETE /bookmarks/:id` - ブックマーク削除
+  - ✅ `GET /categories` - カテゴリ一覧取得
+  - ✅ `POST /categories` - カテゴリ作成（色・アイコン・階層対応）
+  - ✅ `PUT /categories/:id` - カテゴリ編集
+  - ✅ `DELETE /categories/:id` - カテゴリ削除
+  - ✅ `PUT /categories/order` - カテゴリ並び順変更
+  - ✅ `POST /bookmarks/bulk` - 一括操作API（複数選択・移動）
   - _Requirements: 2, 3_
 
-- [ ] 7. 検索・フィルタリング機能実装
-  - `GET /search` - 複合検索エンドポイント実装
-  - PostgreSQL全文検索実装（tsvectorとGINインデックス活用）
-  - 複合検索条件サポート（テキスト・カテゴリ・タグ・日付・作者）
-  - ファセット検索実装（カテゴリ・タグ・作者別の件数集計）
-  - 検索結果ソート機能（関連度・日付・作者）
-  - `GET /search/history` - 検索履歴取得
-  - `POST /search/history` - 検索履歴保存
+- [x] 7. 検索・フィルタリング機能実装 ✅️（リファクタリング済）
+  - ✅ `GET /search` - 複合検索エンドポイント実装
+  - ✅ PostgreSQL全文検索実装（tsvectorとGINインデックス活用）
+  - ✅ 複合検索条件サポート（テキスト・カテゴリ・タグ・日付・作者）
+  - ✅ ファセット検索実装（カテゴリ・タグ・作者別の件数集計）
+  - ✅ 検索結果ソート機能（関連度・日付・作者）
+  - ✅ `GET /search/history` - 検索履歴取得
+  - ✅ `POST /search/history` - 検索履歴保存
+  - ✅ 検索アナリティクス・提案機能
   - _Requirements: 4_
 
 ### 4. フロントエンド基礎実装
