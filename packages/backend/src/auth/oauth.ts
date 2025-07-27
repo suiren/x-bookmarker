@@ -134,7 +134,6 @@ class OAuthService {
       redirectUrl,
       timestamp: Date.now(),
       nonce,
-      userId, // ユーザーIDを含める（オプション）
     });
 
     // PKCEチャレンジとベリファイアを生成
@@ -295,7 +294,7 @@ class OAuthService {
     }
 
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipherGCM('aes-256-gcm', this.config.encryptionKey, iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.config.encryptionKey, iv);
 
     let encrypted = cipher.update(
       JSON.stringify(validationResult.data),
@@ -327,7 +326,7 @@ class OAuthService {
       const iv = Buffer.from(ivHex, 'hex');
       const authTag = Buffer.from(authTagHex, 'hex');
 
-      const decipher = crypto.createDecipherGCM('aes-256-gcm', this.config.encryptionKey, iv);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', this.config.encryptionKey, iv);
       decipher.setAuthTag(authTag);
       
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');

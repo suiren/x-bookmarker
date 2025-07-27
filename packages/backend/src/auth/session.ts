@@ -192,7 +192,7 @@ class SessionService {
    */
   private encryptSessionData(data: SessionData): string {
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipherGCM('aes-256-gcm', this.config.encryptionKey, iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.config.encryptionKey, iv);
     
     let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -217,7 +217,7 @@ class SessionService {
       const iv = Buffer.from(ivHex, 'hex');
       const authTag = Buffer.from(authTagHex, 'hex');
       
-      const decipher = crypto.createDecipherGCM('aes-256-gcm', this.config.encryptionKey, iv);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', this.config.encryptionKey, iv);
       decipher.setAuthTag(authTag);
       
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');

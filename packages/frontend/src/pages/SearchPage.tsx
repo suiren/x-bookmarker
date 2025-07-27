@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Search, Filter, TrendingUp, Clock, Tag, Grid, List, Loader2, RefreshCw } from 'lucide-react';
 import { useBookmarks } from '../hooks/useBookmarks';
 import { useCategories } from '../hooks/useCategories';

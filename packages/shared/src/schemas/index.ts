@@ -1,11 +1,10 @@
 import { z } from 'zod';
 
 export const UserSettingsSchema = z.object({
-  theme: z.enum(['light', 'dark']).default('light'),
+  theme: z.enum(['light', 'dark', 'system']).default('system'),
   viewMode: z.enum(['grid', 'list']).default('grid'),
   defaultCategory: z.string().optional(),
   autoSync: z.boolean().default(true),
-  backupEnabled: z.boolean().default(true),
   aiSuggestions: z.boolean().default(true),
 });
 
@@ -216,10 +215,10 @@ export const PaginatedResponseSchema = z.object({
 
 export type APIError = z.infer<typeof APIErrorSchema>;
 export type ValidationError = z.infer<typeof ValidationErrorSchema>;
-export type APIResponse<T = any> = Omit<z.infer<typeof APIResponseSchema>, 'data'> & {
+export type APIResponseType<T = any> = Omit<z.infer<typeof APIResponseSchema>, 'data'> & {
   data?: T;
 };
-export type PaginatedResponse<T = any> = Omit<z.infer<typeof PaginatedResponseSchema>, 'data'> & {
+export type PaginatedResponseType<T = any> = Omit<z.infer<typeof PaginatedResponseSchema>, 'data'> & {
   data: T[];
 };
 

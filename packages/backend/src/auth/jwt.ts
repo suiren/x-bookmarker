@@ -80,12 +80,12 @@ class JWTService {
   generateAccessToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
     console.log(`🎫 アクセストークン生成中: user=${payload.userId}`);
     
-    const options: SignOptions = {
+    const options = {
       expiresIn: this.config.accessTokenExpiry,
       issuer: this.config.issuer,
       audience: this.config.audience,
-      algorithm: 'HS256', // より明示的にアルゴリズム指定
-      jwtid: `access_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // ユニークID
+      algorithm: 'HS256' as const,
+      jwtid: `access_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };
 
     return jwt.sign(payload as any, this.config.secret, options);
@@ -102,11 +102,11 @@ class JWTService {
   generateRefreshToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
     console.log(`🔄 リフレッシュトークン生成中: user=${payload.userId}`);
     
-    const options: SignOptions = {
+    const options = {
       expiresIn: this.config.refreshTokenExpiry,
       issuer: this.config.issuer,
       audience: this.config.audience,
-      algorithm: 'HS256',
+      algorithm: 'HS256' as const,
       jwtid: `refresh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };
 
@@ -276,6 +276,7 @@ class JWTService {
       // 新しいトークンペアを生成
       const newTokens = this.generateTokens({
         userId: payload.userId,
+        xUserId: payload.xUserId,
         username: payload.username,
         role: payload.role,
       });

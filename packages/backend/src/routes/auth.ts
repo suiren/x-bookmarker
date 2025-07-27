@@ -34,14 +34,20 @@ if (process.env.NODE_ENV === 'development') {
       const testUserId = 'test-user-id';
       const testUser = {
         id: testUserId,
+        xUserId: 'test123456789',
         username: 'testuser',
         displayName: 'Test User',
         avatarUrl: 'https://example.com/avatar.jpg',
       };
 
       // Generate JWT tokens for testing
-      const accessToken = jwtService.generateAccessToken(testUserId);
-      const refreshToken = jwtService.generateRefreshToken(testUserId);
+      const tokenPayload = {
+        userId: testUser.id,
+        xUserId: testUser.xUserId,
+        username: testUser.username,
+      };
+      const accessToken = jwtService.generateAccessToken(tokenPayload);
+      const refreshToken = jwtService.generateRefreshToken(tokenPayload);
 
       res.json({
         success: true,
@@ -138,6 +144,15 @@ router.get(
           success: false,
           error: error_description || error,
           code: 'OAUTH_CALLBACK_ERROR',
+        });
+        return;
+      }
+
+      if (!oauthService) {
+        res.status(500).json({
+          success: false,
+          error: 'OAuth service not available',
+          code: 'OAUTH_SERVICE_ERROR',
         });
         return;
       }

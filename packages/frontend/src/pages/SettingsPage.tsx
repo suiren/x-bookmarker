@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, Download, Upload, Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { Save, Download, Upload, Trash2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUpdateUserSettings } from '../hooks/useAuth';
 import { useExportBookmarks, useImportBookmarks, useClearSyncData } from '../hooks/useSync';

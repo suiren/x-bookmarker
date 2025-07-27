@@ -170,7 +170,7 @@ class XApiClient {
             detail: 'Bearer token is invalid or expired',
             value: null
           };
-          throw new XApiRequestError(apiError, status);
+          throw new XApiRequestError(apiError.errors ? apiError : { ...apiError, errors: [] }, status);
         }
 
         // Handle authorization errors
@@ -182,7 +182,7 @@ class XApiClient {
             detail: 'Required scopes or permissions are missing',
             value: null
           };
-          throw new XApiRequestError(apiError, status);
+          throw new XApiRequestError(apiError.errors ? apiError : { ...apiError, errors: [] }, status);
         }
 
         // Handle other X API errors
