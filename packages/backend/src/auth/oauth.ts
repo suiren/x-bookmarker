@@ -27,7 +27,7 @@ import {
   XTokenResponse,
   XTokenResponseSchema,
 } from '@x-bookmarker/shared';
-import { config } from '../config';
+// import { config } from '../config';
 
 interface OAuthConfig {
   clientId: string;
@@ -55,9 +55,9 @@ class OAuthService {
 
   constructor() {
     this.config = {
-      clientId: config.x.clientId,
-      clientSecret: config.x.clientSecret,
-      redirectUri: config.x.callbackUrl,
+      clientId: process.env.X_CLIENT_ID || '',
+      clientSecret: process.env.X_CLIENT_SECRET || '',
+      redirectUri: process.env.X_REDIRECT_URI || '',
       encryptionKey: process.env.OAUTH_ENCRYPTION_KEY || 'x-bookmarker-oauth-key-change-in-production',
     };
 
@@ -86,7 +86,7 @@ class OAuthService {
     }
     
     if (this.config.encryptionKey === 'x-bookmarker-oauth-key-change-in-production') {
-      if (config.env === 'production') {
+      if (process.env.NODE_ENV === 'production') {
         throw new Error('本番環境ではOAUTH_ENCRYPTION_KEYを設定してください');
       } else {
         console.warn('⚠️ デフォルトのOAuth暗号化キーを使用中（開発環境のみ）');
@@ -432,8 +432,21 @@ class OAuthService {
   }
 }
 
-// Singleton instance
-export const oauthService = new OAuthService();
+// Singleton instance (conditionally created in development)
+let oauthService: OAuthService | null = null;
+
+try {
+  oauthService = new OAuthService();
+} catch (error) {
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('⚠️ OAuth service disabled in development mode:', (error as Error).message);
+    oauthService = null;
+  } else {
+    throw error;
+  }
+}
+
+export { oauthService };
 
 // Export for testing
 export { OAuthService };

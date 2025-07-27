@@ -7,13 +7,10 @@ dotenv.config();
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || 'localhost';
 
-// Validate required environment variables
-const requiredEnvVars = [
-  'JWT_SECRET',
-  'X_CLIENT_ID',
-  'X_CLIENT_SECRET',
-  'X_REDIRECT_URI',
-];
+// Validate required environment variables (skip in development with dummy values)
+const requiredEnvVars = process.env.NODE_ENV === 'production' 
+  ? ['JWT_SECRET', 'X_CLIENT_ID', 'X_CLIENT_SECRET', 'X_REDIRECT_URI']
+  : ['JWT_SECRET']; // Only JWT_SECRET is required in development
 
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
