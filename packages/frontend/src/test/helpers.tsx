@@ -6,6 +6,8 @@ import React from 'react';
 import { render, RenderOptions } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { createTestQueryClient } from './setup';
 
 // テスト用プロバイダー
@@ -21,7 +23,9 @@ export const TestProviders: React.FC<TestProvidersProps> = ({
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        {children}
+        <DndProvider backend={HTML5Backend}>
+          {children}
+        </DndProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );

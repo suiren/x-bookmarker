@@ -1,9 +1,13 @@
-import { useState } from 'react';
-import { Grid, List, Filter, MoreHorizontal, Loader2, RefreshCw, Search } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Grid, List, Filter, Loader2, RefreshCw, Search } from 'lucide-react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useBookmarkStore } from '../stores/bookmarkStore';
 import { useBookmarks, useBulkUpdateBookmarks, useBulkDeleteBookmarks } from '../hooks/useBookmarks';
 import { useCategories } from '../hooks/useCategories';
 import SearchModal from '../components/SearchModal';
+import BookmarkCard from '../components/BookmarkCard';
+import { bookmarksToFrontend, categoriesToFrontend } from '../utils/typeUtils';
 import { clsx } from 'clsx';
 import type { SearchQuery } from '../types';
 
@@ -24,6 +28,8 @@ const BookmarksPage = () => {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [currentSearchQuery, setCurrentSearchQuery] = useState<Partial<SearchQuery>>({});
   const [page, setPage] = useState(1);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const limit = 20;
 
   // API queries
@@ -34,13 +40,13 @@ const BookmarksPage = () => {
     error,
     refetch,
   } = useBookmarks({
-    categoryIds: currentSearchQuery.categoryId ? [currentSearchQuery.categoryId] : 
-                 filterCategory ? [filterCategory] : undefined,
-    text: currentSearchQuery.q || searchQuery || undefined,
+    categoryIds: currentSearchQuery.categoryIds || 
+                 (filterCategory ? [filterCategory] : undefined),
+    text: currentSearchQuery.text || searchQuery || undefined,
     tags: currentSearchQuery.tags,
     dateFrom: currentSearchQuery.dateFrom,
     dateTo: currentSearchQuery.dateTo,
-    author: currentSearchQuery.author,
+    authorUsername: currentSearchQuery.authorUsername,
     sortBy: currentSearchQuery.sortBy || sortBy,
     sortOrder: currentSearchQuery.sortOrder || sortOrder,
     limit,
@@ -53,7 +59,9 @@ const BookmarksPage = () => {
   const bulkUpdateMutation = useBulkUpdateBookmarks();
   const bulkDeleteMutation = useBulkDeleteBookmarks();
 
-  const bookmarks = bookmarksData?.data || [];
+  // 型変換してからフロントエンドで使用
+  const bookmarks = bookmarksData?.data ? bookmarksToFrontend(bookmarksData.data) : [];
+  const frontendCategories = categoriesToFrontend(categories);
   const totalCount = bookmarksData?.pagination?.total || 0;
 
   // Event handlers
@@ -94,6 +102,68 @@ const BookmarksPage = () => {
   const clearSearch = () => {
     setCurrentSearchQuery({});
     setPage(1);
+  };
+
+  // Shift+Click対応の選択処理
+  const handleBookmarkSelection = useCallback((bookmarkId: string, event?: React.MouseEvent) => {
+    const currentIndex = bookmarks.findIndex(bookmark => bookmark.id === bookmarkId);
+    
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      // Shift+Clickの場合：範囲選択
+      const startIndex = Math.min(lastSelectedIndex, currentIndex);
+      const endIndex = Math.max(lastSelectedIndex, currentIndex);
+      
+      const rangeBookmarkIds = bookmarks
+        .slice(startIndex, endIndex + 1)
+        .map(bookmark => bookmark.id);
+      
+      // 現在の選択状態を基に範囲選択を処理
+      const shouldSelect = !selectedBookmarks.includes(bookmarkId);
+      rangeBookmarkIds.forEach(id => {
+        if (shouldSelect && !selectedBookmarks.includes(id)) {
+          toggleBookmarkSelection(id);
+        } else if (!shouldSelect && selectedBookmarks.includes(id)) {
+          toggleBookmarkSelection(id);
+        }
+      });
+    } else {
+      // 通常のクリック
+      toggleBookmarkSelection(bookmarkId);
+      setLastSelectedIndex(currentIndex);
+    }
+  }, [bookmarks, selectedBookmarks, lastSelectedIndex, toggleBookmarkSelection]);
+
+  // ドラッグ&ドロップ処理
+  const handleDragStart = useCallback((bookmarkId: string) => {
+    setIsDragging(true);
+    // ドラッグ中のブックマークが選択されていない場合は選択する
+    if (!selectedBookmarks.includes(bookmarkId)) {
+      toggleBookmarkSelection(bookmarkId);
+    }
+  }, [selectedBookmarks, toggleBookmarkSelection]);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(async (targetCategoryId: string, droppedBookmarkIds: string[]) => {
+    if (droppedBookmarkIds.length === 0) return;
+    
+    try {
+      await bulkUpdateMutation.mutateAsync({
+        bookmarkIds: droppedBookmarkIds,
+        input: { categoryId: targetCategoryId },
+      });
+      clearSelection();
+    } catch (err) {
+      console.error('Failed to move bookmarks:', err);
+    }
+  }, [bulkUpdateMutation, clearSelection]);
+
+  // その他のアクション処理
+  const handleMoreActions = (bookmarkId: string) => {
+    // TODO: ブックマークの詳細アクションメニューを実装
+    console.log('ブックマークアクション:', bookmarkId);
   };
 
   // Check if there's an active search
@@ -140,7 +210,8 @@ const BookmarksPage = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <DndProvider backend={HTML5Backend}>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -219,7 +290,7 @@ const BookmarksPage = () => {
                 </button>
                 <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
                   <div className="py-1 max-h-48 overflow-y-auto">
-                    {categories.map((category) => (
+                    {frontendCategories.map((category) => (
                       <button
                         key={category.id}
                         onClick={() => handleBulkCategoryChange(category.id)}
@@ -268,9 +339,9 @@ const BookmarksPage = () => {
               <Search className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               <span className="text-sm text-blue-800 dark:text-blue-200">
                 検索条件が適用されています
-                {currentSearchQuery.q && (
+                {currentSearchQuery.text && (
                   <span className="ml-2 font-medium">
-                    キーワード: "{currentSearchQuery.q}"
+                    キーワード: "{currentSearchQuery.text}"
                   </span>
                 )}
                 {currentSearchQuery.tags && currentSearchQuery.tags.length > 0 && (
@@ -308,105 +379,22 @@ const BookmarksPage = () => {
               : 'space-y-4'
           )}
         >
-          {bookmarks.map((bookmark) => (
-            <div
+          {bookmarks.map((bookmark, index) => (
+            <BookmarkCard
               key={bookmark.id}
-              className={clsx(
-                'card p-4 cursor-pointer transition-all duration-200 hover:shadow-md',
-                selectedBookmarks.includes(bookmark.id)
-                  ? 'ring-2 ring-primary-500 border-primary-300 dark:border-primary-600'
-                  : 'hover:border-gray-300 dark:hover:border-gray-600'
-              )}
-              onClick={() => toggleBookmarkSelection(bookmark.id)}
-            >
-              {/* Author Info */}
-              <div className="flex items-center space-x-3 mb-3">
-                {bookmark.authorAvatarUrl ? (
-                  <img
-                    src={bookmark.authorAvatarUrl}
-                    alt={bookmark.authorDisplayName}
-                    className="w-10 h-10 rounded-full"
-                  />
-                ) : (
-                  <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {bookmark.authorDisplayName}
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    @{bookmark.authorUsername}
-                  </p>
-                </div>
-                <button className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Content */}
-              <div className="mb-3">
-                <p className="text-gray-900 dark:text-gray-100 line-clamp-3">
-                  {bookmark.content}
-                </p>
-              </div>
-
-              {/* Media Preview */}
-              {bookmark.mediaUrls.length > 0 && (
-                <div className="mb-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    {bookmark.mediaUrls.slice(0, 4).map((url, index) => (
-                      <img
-                        key={index}
-                        src={url}
-                        alt=""
-                        className="w-full h-20 object-cover rounded"
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Tags */}
-              {bookmark.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {bookmark.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Footer */}
-              <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-                <span>
-                  {new Date(bookmark.bookmarkedAt).toLocaleDateString('ja-JP')}
-                </span>
-                {bookmark.categoryId && (
-                  (() => {
-                    const category = categories.find(c => c.id === bookmark.categoryId);
-                    return category ? (
-                      <span 
-                        className="px-2 py-1 rounded text-xs flex items-center space-x-1"
-                        style={{ 
-                          backgroundColor: category.color + '20',
-                          color: category.color 
-                        }}
-                      >
-                        <div
-                          className="w-2 h-2 rounded"
-                          style={{ backgroundColor: category.color }}
-                        />
-                        <span>{category.name}</span>
-                      </span>
-                    ) : null;
-                  })()
-                )}
-              </div>
-            </div>
+              bookmark={bookmark}
+              categories={frontendCategories}
+              isSelected={selectedBookmarks.includes(bookmark.id)}
+              viewMode={viewMode}
+              onToggleSelection={(id, event) => handleBookmarkSelection(id, event)}
+              onMoreActions={handleMoreActions}
+              onDragStart={() => handleDragStart(bookmark.id)}
+              onDragEnd={handleDragEnd}
+              onDrop={handleDrop}
+              isDragging={isDragging}
+              selectedBookmarks={selectedBookmarks}
+              index={index}
+            />
           ))}
         </div>
       ) : (
@@ -433,14 +421,15 @@ const BookmarksPage = () => {
         </div>
       )}
 
-      {/* Search Modal */}
-      <SearchModal
-        isOpen={showSearchModal}
-        onClose={() => setShowSearchModal(false)}
-        onSearch={handleSearch}
-        initialQuery={currentSearchQuery}
-      />
-    </div>
+        {/* Search Modal */}
+        <SearchModal
+          isOpen={showSearchModal}
+          onClose={() => setShowSearchModal(false)}
+          onSearch={handleSearch}
+          initialQuery={currentSearchQuery}
+        />
+      </div>
+    </DndProvider>
   );
 };
 
