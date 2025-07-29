@@ -425,26 +425,6 @@ class XApiClient {
       maxAttempts: config.retryCount || this.config.retryAttempts,
       useCircuitBreaker: config.useCircuitBreaker !== false,
     });
-
-        // Don't retry on the last attempt
-        if (attempt === maxRetries) {
-          break;
-        }
-
-        // Calculate exponential backoff delay
-        const baseDelay = this.config.retryDelay;
-        const exponentialDelay = baseDelay * Math.pow(2, attempt);
-        const jitterDelay = exponentialDelay + Math.random() * 1000;
-        const delay = Math.min(jitterDelay, 60000); // Cap at 60 seconds
-
-        console.log(
-          `🔄 X API request failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${Math.round(delay)}ms...`
-        );
-        await this.sleep(delay);
-      }
-    }
-
-    throw lastError!;
   }
 
   /**
