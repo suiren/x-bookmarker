@@ -8,9 +8,16 @@ import './index.css';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5分
-      gcTime: 10 * 60 * 1000, // 10分
+      // Default cache strategy
+      staleTime: 5 * 60 * 1000, // 5分 - デフォルト
+      gcTime: 10 * 60 * 1000, // 10分 - ガベージコレクションタイム
       retry: 2,
+      refetchOnWindowFocus: false, // ウィンドウフォーカス時の自動再取得を無効
+      refetchOnReconnect: true, // ネットワーク再接続時は再取得
+      refetchOnMount: true, // マウント時は再取得
+    },
+    mutations: {
+      retry: 1, // ミューテーションは1回のみリトライ
     },
   },
 });

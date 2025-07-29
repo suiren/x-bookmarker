@@ -22,7 +22,8 @@ export const useCategories = () => {
   return useQuery({
     queryKey: categoryKeys.list(),
     queryFn: () => categoryService.getCategories(),
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 15 * 60 * 1000, // 15分 - カテゴリは変更頻度が低い
+    gcTime: 30 * 60 * 1000, // 30分
   });
 };
 

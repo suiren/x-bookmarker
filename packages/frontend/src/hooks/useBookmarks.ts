@@ -24,7 +24,8 @@ export const useBookmarks = (params: Partial<SearchQuery> = {}) => {
   return useQuery({
     queryKey: bookmarkKeys.list(params),
     queryFn: () => bookmarkService.getBookmarks(params),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 3 * 60 * 1000, // 3分 - ブックマークは比較的頻繁に更新される
+    gcTime: 10 * 60 * 1000, // 10分
   });
 };
 
@@ -44,7 +45,8 @@ export const useSearchBookmarks = (query: SearchQuery) => {
     queryKey: bookmarkKeys.search(query),
     queryFn: () => bookmarkService.searchBookmarks(query),
     enabled: !!query.text || !!query.categoryIds?.length || !!query.tags?.length,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 1 * 60 * 1000, // 1分 - 検索結果は短時間キャッシュ
+    gcTime: 5 * 60 * 1000, // 5分
   });
 };
 
@@ -53,7 +55,8 @@ export const useSearchHistory = () => {
   return useQuery({
     queryKey: bookmarkKeys.history(),
     queryFn: () => bookmarkService.getSearchHistory(),
-    staleTime: 10 * 60 * 1000,
+    staleTime: 30 * 60 * 1000, // 30分 - 検索履歴は変更頻度が低い
+    gcTime: 60 * 60 * 1000, // 1時間
   });
 };
 

@@ -3,7 +3,7 @@
  * 個別のブックマークを表示するカードコンポーネント
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, memo } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { useDrag, useDrop } from 'react-dnd';
 import { clsx } from 'clsx';
@@ -24,7 +24,7 @@ interface BookmarkCardProps {
   index?: number;
 }
 
-const BookmarkCard: React.FC<BookmarkCardProps> = ({
+const BookmarkCard = memo<BookmarkCardProps>(({
   bookmark,
   categories,
   isSelected,
@@ -244,6 +244,8 @@ const BookmarkCard: React.FC<BookmarkCardProps> = ({
       </div>
     </div>
   );
-};
+});
+
+BookmarkCard.displayName = 'BookmarkCard';
 
 export default BookmarkCard;

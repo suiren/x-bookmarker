@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { X, Search, Filter, Calendar, Tag, User, SortAsc, SortDesc } from 'lucide-react';
 import { useCategories } from '../hooks/useCategories';
 import { useSearchHistory } from '../hooks/useSearchHistory';
@@ -11,7 +11,7 @@ interface SearchModalProps {
   initialQuery?: Partial<SearchQuery>;
 }
 
-const SearchModal = ({ isOpen, onClose, onSearch, initialQuery = {} }: SearchModalProps) => {
+const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initialQuery = {} }) => {
   const { data: categories = [] } = useCategories();
   const { data: searchHistory = [], addToHistory } = useSearchHistory();
 
@@ -389,6 +389,8 @@ const SearchModal = ({ isOpen, onClose, onSearch, initialQuery = {} }: SearchMod
       </div>
     </div>
   );
-};
+});
+
+SearchModal.displayName = 'SearchModal';
 
 export default SearchModal;

@@ -4,6 +4,13 @@ import { useBookmarks } from '../hooks/useBookmarks';
 import { useCategories } from '../hooks/useCategories';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import SearchModal from '../components/SearchModal';
+import SearchBar from '../components/search/SearchBar';
+import SearchFacets from '../components/search/SearchFacets';
+import SearchBookmarkCard from '../components/search/SearchBookmarkCard';
+import SearchHistory from '../components/search/SearchHistory';
+import SortControls from '../components/search/SortControls';
+import Pagination from '../components/common/Pagination';
+import { useSearchHighlight } from '../hooks/useSearchHighlight';
 import { clsx } from 'clsx';
 import type { SearchQuery, Bookmark } from '../types';
 
@@ -13,6 +20,11 @@ const SearchPage = () => {
   const [quickSearch, setQuickSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [page, setPage] = useState(1);
+  const [selectedFacets, setSelectedFacets] = useState<{
+    categories?: string[];
+    tags?: string[];
+    authors?: string[];
+  }>({});
   const limit = 20;
 
   const { data: categories = [] } = useCategories();
@@ -40,7 +52,21 @@ const SearchPage = () => {
 
   const bookmarks = searchResults?.data || [];
   const totalCount = searchResults?.pagination?.total || 0;
+  const totalPages = Math.ceil(totalCount / limit);
   const popularTags = getPopularTags(15);
+
+  // Get search terms for highlighting
+  const { searchTerms } = useSearchHighlight(
+    {
+      q: searchQuery.q,
+      categoryId: searchQuery.categoryId,
+      tags: searchQuery.tags,
+      dateFrom: searchQuery.dateFrom,
+      dateTo: searchQuery.dateTo,
+      author: searchQuery.author,
+    },
+    quickSearch
+  );
 
   // Check if there's an active search
   const hasActiveSearch = Boolean(quickSearch) || Object.keys(searchQuery).some(key => {
@@ -55,9 +81,64 @@ const SearchPage = () => {
     setPage(1);
   };
 
-  const handleQuickSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSearchQuery({});
+  const handleQuickSearch = (query: string) => {
+    setSearchQuery({ q: query });
+    setQuickSearch(query);
+    setPage(1);
+  };
+
+  const handleSuggestionSelect = (suggestion: {
+    type: 'tag' | 'category' | 'author';
+    value: string;
+    data?: any;
+  }) => {
+    switch (suggestion.type) {
+      case 'tag':
+        setSearchQuery({ tags: [suggestion.value] });
+        break;
+      case 'category':
+        setSearchQuery({ categoryId: suggestion.data?.id || suggestion.value });
+        break;
+      case 'author':
+        setSearchQuery({ author: suggestion.value });
+        break;
+    }
+    setQuickSearch('');
+    setPage(1);
+  };
+
+  const handleFacetSelect = (facet: {
+    type: 'category' | 'tag' | 'author';
+    value: string;
+    data?: any;
+  }) => {
+    const newQuery = { ...searchQuery };
+    const newFacets = { ...selectedFacets };
+
+    switch (facet.type) {
+      case 'category':
+        newQuery.categoryId = facet.value;
+        newFacets.categories = [facet.value];
+        break;
+      case 'tag':
+        const currentTags = newQuery.tags || [];
+        if (currentTags.includes(facet.value)) {
+          newQuery.tags = currentTags.filter(t => t !== facet.value);
+          newFacets.tags = newFacets.tags?.filter(t => t !== facet.value) || [];
+        } else {
+          newQuery.tags = [...currentTags, facet.value];
+          newFacets.tags = [...(newFacets.tags || []), facet.value];
+        }
+        break;
+      case 'author':
+        newQuery.author = facet.value;
+        newFacets.authors = [facet.value];
+        break;
+    }
+
+    setSearchQuery(newQuery);
+    setSelectedFacets(newFacets);
+    setQuickSearch('');
     setPage(1);
   };
 
@@ -76,6 +157,7 @@ const SearchPage = () => {
   const clearSearch = () => {
     setSearchQuery({});
     setQuickSearch('');
+    setSelectedFacets({});
     setPage(1);
   };
 
@@ -93,33 +175,16 @@ const SearchPage = () => {
         </p>
       </div>
 
-      {/* Quick Search */}
+      {/* Search Bar */}
       <div className="max-w-2xl mx-auto">
-        <form onSubmit={handleQuickSearch} className="relative">
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            value={quickSearch}
-            onChange={(e) => setQuickSearch(e.target.value)}
-            placeholder="キーワードを入力してブックマークを検索..."
-            className="w-full pl-12 pr-32 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-          />
-          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex space-x-2">
-            <button
-              type="button"
-              onClick={() => setShowSearchModal(true)}
-              className="px-4 py-2 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 border border-primary-300 dark:border-primary-600 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20"
-            >
-              詳細検索
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg"
-            >
-              検索
-            </button>
-          </div>
-        </form>
+        <SearchBar
+          value={quickSearch}
+          onChange={setQuickSearch}
+          onSearch={handleQuickSearch}
+          onSuggestionSelect={handleSuggestionSelect}
+          onAdvancedClick={() => setShowSearchModal(true)}
+          autoFocus
+        />
       </div>
 
       {/* Popular Tags & Categories */}
@@ -188,54 +253,82 @@ const SearchPage = () => {
         </div>
       )}
 
-      {/* Recent Searches */}
-      {!hasActiveSearch && recentSearches.length > 0 && (
+      {/* Search History */}
+      {!hasActiveSearch && (
         <div className="card p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <Clock className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-              最近の検索
-            </h3>
-          </div>
-          <div className="space-y-2">
-            {recentSearches.map((search, index) => (
-              <button
-                key={index}
-                onClick={() => handleAdvancedSearch(search)}
-                className="w-full text-left p-3 rounded-lg bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-              >
-                <div className="text-sm text-gray-900 dark:text-gray-100">
-                  {search.q || '(キーワードなし)'}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {search.categoryId && categories.find(c => c.id === search.categoryId)?.name}
-                  {search.tags && search.tags.length > 0 && (
-                    <span className="ml-2">
-                      タグ: {search.tags.join(', ')}
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
+          <SearchHistory
+            onSearchSelect={handleAdvancedSearch}
+            currentQuery={searchQuery}
+            maxItems={5}
+            showHeader={true}
+          />
         </div>
       )}
 
       {/* Search Results */}
       {hasActiveSearch && (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Search Facets Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            <SearchFacets
+              searchQuery={{
+                q: searchQuery.q || quickSearch || undefined,
+                categoryId: searchQuery.categoryId,
+                tags: searchQuery.tags,
+                dateFrom: searchQuery.dateFrom,
+                dateTo: searchQuery.dateTo,
+                author: searchQuery.author,
+              }}
+              onFacetSelect={handleFacetSelect}
+              selectedFacets={selectedFacets}
+            />
+            
+            {/* Search History in Sidebar */}
+            <div className="card p-4">
+              <SearchHistory
+                onSearchSelect={handleAdvancedSearch}
+                currentQuery={searchQuery}
+                maxItems={3}
+                showHeader={true}
+              />
+            </div>
+          </div>
+
+          {/* Main Results Area */}
+          <div className="lg:col-span-3 space-y-6">
           {/* Search Results Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                検索結果
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400">
-                {totalCount} 件のブックマークが見つかりました
-              </p>
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  検索結果
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {totalCount.toLocaleString()} 件のブックマークが見つかりました
+                </p>
+              </div>
+
+              <button
+                onClick={clearSearch}
+                className="btn-secondary sm:self-start"
+              >
+                検索をクリア
+              </button>
             </div>
 
-            <div className="flex items-center space-x-4">
+            {/* Controls Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              {/* Sort Controls */}
+              <SortControls
+                sortBy={searchQuery.sortBy || 'relevance'}
+                sortOrder={searchQuery.sortOrder || 'desc'}
+                onSortChange={(sortBy, sortOrder) => {
+                  setSearchQuery(prev => ({ ...prev, sortBy, sortOrder }));
+                  setPage(1);
+                }}
+                disabled={isLoading}
+              />
+
               {/* View Mode Toggle */}
               <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                 <button
@@ -246,6 +339,7 @@ const SearchPage = () => {
                       ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
                       : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                   )}
+                  title="グリッド表示"
                 >
                   <Grid className="w-4 h-4" />
                 </button>
@@ -257,17 +351,11 @@ const SearchPage = () => {
                       ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
                       : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                   )}
+                  title="リスト表示"
                 >
                   <List className="w-4 h-4" />
                 </button>
               </div>
-
-              <button
-                onClick={clearSearch}
-                className="btn-secondary"
-              >
-                検索をクリア
-              </button>
             </div>
           </div>
 
@@ -308,81 +396,35 @@ const SearchPage = () => {
               )}
             >
               {bookmarks.map((bookmark: Bookmark) => (
-                <div
+                <SearchBookmarkCard
                   key={bookmark.id}
-                  className="card p-4 hover:shadow-md transition-shadow"
-                >
-                  {/* Author Info */}
-                  <div className="flex items-center space-x-3 mb-3">
-                    {bookmark.authorAvatarUrl ? (
-                      <img
-                        src={bookmark.authorAvatarUrl}
-                        alt={bookmark.authorDisplayName}
-                        className="w-10 h-10 rounded-full"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 dark:text-gray-100">
-                        {bookmark.authorDisplayName}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        @{bookmark.authorUsername}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="mb-3">
-                    <p className="text-gray-900 dark:text-gray-100 line-clamp-3">
-                      {bookmark.content}
-                    </p>
-                  </div>
-
-                  {/* Tags */}
-                  {bookmark.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {bookmark.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-                    <span>
-                      {new Date(bookmark.bookmarkedAt).toLocaleDateString('ja-JP')}
-                    </span>
-                    {bookmark.categoryId && (
-                      (() => {
-                        const category = categories.find(c => c.id === bookmark.categoryId);
-                        return category ? (
-                          <span 
-                            className="px-2 py-1 rounded text-xs flex items-center space-x-1"
-                            style={{ 
-                              backgroundColor: category.color + '20',
-                              color: category.color 
-                            }}
-                          >
-                            <div
-                              className="w-2 h-2 rounded"
-                              style={{ backgroundColor: category.color }}
-                            />
-                            <span>{category.name}</span>
-                          </span>
-                        ) : null;
-                      })()
-                    )}
-                  </div>
-                </div>
+                  bookmark={bookmark}
+                  searchTerms={searchTerms}
+                  viewMode={viewMode}
+                  onTagClick={handleTagClick}
+                  onAuthorClick={(username) => {
+                    setSearchQuery({ author: username });
+                    setQuickSearch('');
+                    setPage(1);
+                  }}
+                  onCategoryClick={handleCategoryClick}
+                />
               ))}
             </div>
+
+            {/* Pagination */}
+            {totalCount > limit && (
+              <div className="mt-8">
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  totalItems={totalCount}
+                  itemsPerPage={limit}
+                  onPageChange={setPage}
+                  showInfo={true}
+                />
+              </div>
+            )}
           ) : (
             <div className="text-center py-12">
               <div className="max-w-sm mx-auto">

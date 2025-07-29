@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, memo } from 'react';
 import Header from './Header';
 import Sidebar from './Sidebar';
 
@@ -6,7 +6,7 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-const Layout = ({ children }: LayoutProps) => {
+const Layout = memo<LayoutProps>(({ children }) => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
@@ -18,6 +18,8 @@ const Layout = ({ children }: LayoutProps) => {
       </div>
     </div>
   );
-};
+});
+
+Layout.displayName = 'Layout';
 
 export default Layout;

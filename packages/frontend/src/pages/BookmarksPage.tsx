@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, memo } from 'react';
 import { Grid, List, Filter, Loader2, RefreshCw, Search } from 'lucide-react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -7,6 +7,7 @@ import { useBookmarks, useBulkUpdateBookmarks, useBulkDeleteBookmarks } from '..
 import { useCategories } from '../hooks/useCategories';
 import SearchModal from '../components/SearchModal';
 import BookmarkCard from '../components/BookmarkCard';
+import VirtualBookmarkList from '../components/VirtualBookmarkList';
 import { bookmarksToFrontend, categoriesToFrontend } from '../utils/typeUtils';
 import { clsx } from 'clsx';
 import type { SearchQuery } from '../types';
@@ -59,13 +60,32 @@ const BookmarksPage = () => {
   const bulkUpdateMutation = useBulkUpdateBookmarks();
   const bulkDeleteMutation = useBulkDeleteBookmarks();
 
-  // 型変換してからフロントエンドで使用
-  const bookmarks = bookmarksData?.data ? bookmarksToFrontend(bookmarksData.data) : [];
-  const frontendCategories = categoriesToFrontend(categories);
+  // 型変換してからフロントエンドで使用（memoized to prevent unnecessary recalculations）
+  const bookmarks = useMemo(() => 
+    bookmarksData?.data ? bookmarksToFrontend(bookmarksData.data) : [], 
+    [bookmarksData?.data]
+  );
+  
+  const frontendCategories = useMemo(() => 
+    categoriesToFrontend(categories), 
+    [categories]
+  );
+  
   const totalCount = bookmarksData?.pagination?.total || 0;
+  
+  // Computed values
+  const hasActiveSearch = useMemo(() => 
+    Boolean(currentSearchQuery.text) || 
+    Object.keys(currentSearchQuery).some(key => {
+      const value = currentSearchQuery[key as keyof SearchQuery];
+      if (Array.isArray(value)) return value.length > 0;
+      return Boolean(value);
+    }), 
+    [currentSearchQuery]
+  );
 
-  // Event handlers
-  const handleBulkCategoryChange = async (categoryId: string) => {
+  // Event handlers (memoized to prevent unnecessary re-renders)
+  const handleBulkCategoryChange = useCallback(async (categoryId: string) => {
     if (selectedBookmarks.length === 0) return;
     
     try {
@@ -77,9 +97,9 @@ const BookmarksPage = () => {
     } catch (err) {
       console.error('Failed to update bookmarks:', err);
     }
-  };
+  }, [selectedBookmarks, bulkUpdateMutation, clearSelection]);
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = useCallback(async () => {
     if (selectedBookmarks.length === 0) return;
     
     if (!confirm(`${selectedBookmarks.length}件のブックマークを削除しますか？`)) {
@@ -92,17 +112,17 @@ const BookmarksPage = () => {
     } catch (err) {
       console.error('Failed to delete bookmarks:', err);
     }
-  };
+  }, [selectedBookmarks, bulkDeleteMutation, clearSelection]);
 
-  const handleSearch = (query: SearchQuery) => {
+  const handleSearch = useCallback((query: SearchQuery) => {
     setCurrentSearchQuery(query);
     setPage(1); // Reset to first page on new search
-  };
+  }, []);
 
-  const clearSearch = () => {
+  const clearSearch = useCallback(() => {
     setCurrentSearchQuery({});
     setPage(1);
-  };
+  }, []);
 
   // Shift+Click対応の選択処理
   const handleBookmarkSelection = useCallback((bookmarkId: string, event?: React.MouseEvent) => {
@@ -161,17 +181,12 @@ const BookmarksPage = () => {
   }, [bulkUpdateMutation, clearSelection]);
 
   // その他のアクション処理
-  const handleMoreActions = (bookmarkId: string) => {
+  const handleMoreActions = useCallback((bookmarkId: string) => {
     // TODO: ブックマークの詳細アクションメニューを実装
     console.log('ブックマークアクション:', bookmarkId);
-  };
+  }, []);
 
-  // Check if there's an active search
-  const hasActiveSearch = Object.keys(currentSearchQuery).some(key => {
-    const value = currentSearchQuery[key as keyof SearchQuery];
-    if (Array.isArray(value)) return value.length > 0;
-    return Boolean(value);
-  });
+  // Remove duplicate hasActiveSearch declaration (already exists above with useMemo)
 
   // Loading state
   if (isLoading) {
@@ -369,34 +384,48 @@ const BookmarksPage = () => {
         </div>
       )}
 
-      {/* Bookmarks Grid/List */}
+      {/* Bookmarks Virtual List */}
       {bookmarks.length > 0 ? (
-        <div
-          className={clsx(
-            'gap-6',
-            viewMode === 'grid'
-              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-              : 'space-y-4'
-          )}
-        >
-          {bookmarks.map((bookmark, index) => (
-            <BookmarkCard
-              key={bookmark.id}
-              bookmark={bookmark}
-              categories={frontendCategories}
-              isSelected={selectedBookmarks.includes(bookmark.id)}
-              viewMode={viewMode}
-              onToggleSelection={(id, event) => handleBookmarkSelection(id, event)}
-              onMoreActions={handleMoreActions}
-              onDragStart={() => handleDragStart(bookmark.id)}
-              onDragEnd={handleDragEnd}
-              onDrop={handleDrop}
-              isDragging={isDragging}
-              selectedBookmarks={selectedBookmarks}
-              index={index}
-            />
-          ))}
-        </div>
+        totalCount > 100 ? (
+          // Use virtual scrolling for large datasets (>100 items)
+          <VirtualBookmarkList
+            bookmarks={bookmarks}
+            height={600}
+            itemHeight={viewMode === 'grid' ? 280 : 180}
+            viewMode={viewMode}
+            isLoading={isLoading}
+            searchTerms={currentSearchQuery.text ? [currentSearchQuery.text] : []}
+            className="rounded-lg border border-gray-200 dark:border-gray-700"
+          />
+        ) : (
+          // Use regular rendering for small datasets
+          <div
+            className={clsx(
+              'gap-6',
+              viewMode === 'grid'
+                ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                : 'space-y-4'
+            )}
+          >
+            {bookmarks.map((bookmark, index) => (
+              <BookmarkCard
+                key={bookmark.id}
+                bookmark={bookmark}
+                categories={frontendCategories}
+                isSelected={selectedBookmarks.includes(bookmark.id)}
+                viewMode={viewMode}
+                onToggleSelection={(id, event) => handleBookmarkSelection(id, event)}
+                onMoreActions={handleMoreActions}
+                onDragStart={() => handleDragStart(bookmark.id)}
+                onDragEnd={handleDragEnd}
+                onDrop={handleDrop}
+                isDragging={isDragging}
+                selectedBookmarks={selectedBookmarks}
+                index={index}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-center py-12">
           <div className="max-w-sm mx-auto">

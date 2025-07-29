@@ -1,5 +1,9 @@
 import dotenv from 'dotenv';
 import { app } from './app';
+import { initializeQueue, cleanupQueue } from './queue/queue';
+import { logger } from './utils/logger';
+// Import sync worker to register job processors
+import './queue/syncWorker';
 
 // Load environment variables
 dotenv.config();
@@ -25,8 +29,20 @@ if (missingEnvVars.length > 0) {
   process.exit(1);
 }
 
+// Initialize queue before starting server
+const startServer = async () => {
+  try {
+    await initializeQueue();
+    logger.info('Queue初期化が完了しました');
+  } catch (error) {
+    logger.error('Queue初期化に失敗しました', { error });
+    process.exit(1);
+  }
+};
+
 // Start server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
+  await startServer();
   console.log('🚀 X Bookmarker API Server Started');
   console.log(`📍 Server running at: http://${HOST}:${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -85,8 +101,16 @@ server.on('error', (error: any) => {
 });
 
 // Graceful shutdown
-const gracefulShutdown = (signal: string) => {
+const gracefulShutdown = async (signal: string) => {
   console.log(`\n🛑 ${signal} received, shutting down gracefully...`);
+
+  // Cleanup queue connections
+  try {
+    await cleanupQueue();
+    logger.info('Queue接続を正常に切断しました');
+  } catch (error) {
+    logger.error('Queue切断時にエラーが発生しました', { error });
+  }
 
   server.close(err => {
     if (err) {
