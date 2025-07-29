@@ -15,6 +15,7 @@ const BookmarksPage = lazy(() => import('./pages/BookmarksPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const SyncPage = lazy(() => import('./pages/SyncPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const DataManagementPage = lazy(() => import('./pages/DataManagementPage'));
 
 // Loading fallback component
 const PageLoadingFallback = () => (
@@ -58,6 +59,7 @@ function App() {
                     <Route path="/search" element={<SearchPage />} />
                     <Route path="/sync" element={<SyncPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/data" element={<DataManagementPage />} />
                   </Routes>
                 </Suspense>
               </Layout>

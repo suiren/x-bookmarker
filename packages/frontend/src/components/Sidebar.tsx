@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Bookmark, Search, RefreshCw, Settings, Plus, Folder, Edit, Trash2 } from 'lucide-react';
+import { Home, Bookmark, Search, RefreshCw, Settings, Database, Plus, Folder, Edit, Trash2 } from 'lucide-react';
 import { useBookmarkStore } from '../stores/bookmarkStore';
 import { useCategories, useDeleteCategory } from '../hooks/useCategories';
 import CategoryModal from './CategoryModal';
@@ -22,6 +22,7 @@ const Sidebar = () => {
     { path: '/bookmarks', icon: Bookmark, label: 'ブックマーク' },
     { path: '/search', icon: Search, label: '検索' },
     { path: '/sync', icon: RefreshCw, label: '同期' },
+    { path: '/data', icon: Database, label: 'データ管理' },
     { path: '/settings', icon: Settings, label: '設定' },
   ];
 
