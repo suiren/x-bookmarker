@@ -17,6 +17,12 @@ import categoryRoutes, {
 import searchRoutes, {
   setDatabase as setSearchDatabase,
 } from './routes/search';
+import { filesRouter } from './routes/files';
+import { backupRouter, setDatabase as setBackupDatabase } from './routes/backup';
+import { exportRouter, setDatabase as setExportDatabase } from './routes/export';
+import { importRouter, setDatabase as setImportDatabase } from './routes/import';
+import { getBackupService } from './services/backupService';
+import { createRequiredDirectories } from './utils/createDirectories';
 
 const app = express();
 
@@ -40,11 +46,19 @@ db.query('SELECT NOW()', (err, result) => {
   }
 });
 
+// Create required directories
+createRequiredDirectories().catch(error => {
+  console.warn('⚠️ Failed to create some directories:', error);
+});
+
 // Inject dependencies into route handlers
 setAuthDatabase(db);
 setBookmarkDatabase(db);
 setCategoryDatabase(db);
 setSearchDatabase(db);
+setBackupDatabase(db);
+setExportDatabase(db);
+setImportDatabase(db);
 
 // Trust proxy (for accurate IP addresses behind reverse proxy)
 app.set('trust proxy', 1);
@@ -94,6 +108,27 @@ app.use('/api/search', searchRoutes);
 // Suggestions routes
 app.use('/api/suggestions', suggestionsRoutes);
 
+// File download routes
+app.use('/api/files', filesRouter);
+
+// Backup management routes
+app.use('/api/backup', backupRouter);
+
+// Export/Import routes
+app.use('/api/export', exportRouter);
+app.use('/api/import', importRouter);
+
+// Initialize backup service and start scheduled backups
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    const backupService = getBackupService(db);
+    backupService.startScheduledBackups();
+    console.log('✅ バックアップサービスを初期化し、スケジュールを開始しました');
+  } catch (error) {
+    console.warn('⚠️ バックアップサービス初期化警告:', error);
+  }
+}
+
 // API status endpoint
 app.get('/api/status', (req, res) => {
   res.json({
@@ -142,6 +177,17 @@ process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM received, shutting down gracefully');
 
   try {
+    // Stop backup schedules
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const backupService = getBackupService(db);
+        backupService.stopScheduledBackups();
+        console.log('✅ Backup schedules stopped');
+      } catch (error) {
+        console.warn('⚠️ Backup service shutdown warning:', error);  
+      }
+    }
+
     // Close database connections
     await db.end();
     console.log('✅ Database connections closed');
@@ -157,6 +203,17 @@ process.on('SIGINT', async () => {
   console.log('🛑 SIGINT received, shutting down gracefully');
 
   try {
+    // Stop backup schedules
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const backupService = getBackupService(db);
+        backupService.stopScheduledBackups();
+        console.log('✅ Backup schedules stopped');
+      } catch (error) {
+        console.warn('⚠️ Backup service shutdown warning:', error);  
+      }
+    }
+
     // Close database connections
     await db.end();
     console.log('✅ Database connections closed');
