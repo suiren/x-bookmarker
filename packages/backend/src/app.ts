@@ -5,7 +5,9 @@ import { Pool } from 'pg';
 import { securityStack, apiSecurityStack } from './middleware/security';
 import { apiRateLimit } from './middleware/rateLimit';
 import authRoutes, { setDatabase as setAuthDatabase } from './routes/auth';
-import syncRoutes, { setSyncDependencies } from './routes/sync';
+import syncRoutes from './routes/sync';
+import sseRoutes from './routes/sse';
+import suggestionsRoutes from './routes/suggestions';
 import bookmarkRoutes, {
   setDatabase as setBookmarkDatabase,
 } from './routes/bookmarks';
@@ -15,7 +17,12 @@ import categoryRoutes, {
 import searchRoutes, {
   setDatabase as setSearchDatabase,
 } from './routes/search';
-import { SyncJobManager } from './jobs/syncJob';
+import { filesRouter } from './routes/files';
+import { backupRouter, setDatabase as setBackupDatabase } from './routes/backup';
+import { exportRouter, setDatabase as setExportDatabase } from './routes/export';
+import { importRouter, setDatabase as setImportDatabase } from './routes/import';
+import { getBackupService } from './services/backupService';
+import { createRequiredDirectories } from './utils/createDirectories';
 
 const app = express();
 
@@ -39,16 +46,19 @@ db.query('SELECT NOW()', (err, result) => {
   }
 });
 
-// Initialize sync job manager
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const syncJobManager = new SyncJobManager(db, redisUrl);
+// Create required directories
+createRequiredDirectories().catch(error => {
+  console.warn('⚠️ Failed to create some directories:', error);
+});
 
 // Inject dependencies into route handlers
 setAuthDatabase(db);
-setSyncDependencies(db, syncJobManager);
 setBookmarkDatabase(db);
 setCategoryDatabase(db);
 setSearchDatabase(db);
+setBackupDatabase(db);
+setExportDatabase(db);
+setImportDatabase(db);
 
 // Trust proxy (for accurate IP addresses behind reverse proxy)
 app.set('trust proxy', 1);
@@ -83,6 +93,9 @@ app.use('/api/auth', authRoutes);
 // Sync routes
 app.use('/api/sync', syncRoutes);
 
+// Server-Sent Events routes
+app.use('/api/sync', sseRoutes);
+
 // Bookmark routes
 app.use('/api/bookmarks', bookmarkRoutes);
 
@@ -91,6 +104,30 @@ app.use('/api/categories', categoryRoutes);
 
 // Search routes
 app.use('/api/search', searchRoutes);
+
+// Suggestions routes
+app.use('/api/suggestions', suggestionsRoutes);
+
+// File download routes
+app.use('/api/files', filesRouter);
+
+// Backup management routes
+app.use('/api/backup', backupRouter);
+
+// Export/Import routes
+app.use('/api/export', exportRouter);
+app.use('/api/import', importRouter);
+
+// Initialize backup service and start scheduled backups
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    const backupService = getBackupService(db);
+    backupService.startScheduledBackups();
+    console.log('✅ バックアップサービスを初期化し、スケジュールを開始しました');
+  } catch (error) {
+    console.warn('⚠️ バックアップサービス初期化警告:', error);
+  }
+}
 
 // API status endpoint
 app.get('/api/status', (req, res) => {
@@ -140,9 +177,16 @@ process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM received, shutting down gracefully');
 
   try {
-    // Close sync job manager
-    await syncJobManager.close();
-    console.log('✅ Sync job manager closed');
+    // Stop backup schedules
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const backupService = getBackupService(db);
+        backupService.stopScheduledBackups();
+        console.log('✅ Backup schedules stopped');
+      } catch (error) {
+        console.warn('⚠️ Backup service shutdown warning:', error);  
+      }
+    }
 
     // Close database connections
     await db.end();
@@ -159,9 +203,16 @@ process.on('SIGINT', async () => {
   console.log('🛑 SIGINT received, shutting down gracefully');
 
   try {
-    // Close sync job manager
-    await syncJobManager.close();
-    console.log('✅ Sync job manager closed');
+    // Stop backup schedules
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const backupService = getBackupService(db);
+        backupService.stopScheduledBackups();
+        console.log('✅ Backup schedules stopped');
+      } catch (error) {
+        console.warn('⚠️ Backup service shutdown warning:', error);  
+      }
+    }
 
     // Close database connections
     await db.end();

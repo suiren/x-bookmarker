@@ -5,6 +5,8 @@ export const JWTPayloadSchema = z.object({
   userId: z.string().uuid(),
   xUserId: z.string(),
   username: z.string(),
+  jti: z.string().optional(),
+  role: z.string().optional(),
   iat: z.number(),
   exp: z.number(),
 });

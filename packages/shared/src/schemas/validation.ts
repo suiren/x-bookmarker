@@ -28,7 +28,7 @@ export const createValidator = <T>(schema: z.ZodSchema<T>) => {
           field: err.path.join('.'),
           message: err.message,
           code: err.code,
-          value: err.input,
+          value: (err as any).received || undefined,
         }));
         return ValidationResult.failure(validationErrors);
       }
@@ -117,8 +117,8 @@ export const createConditionalValidator = <T>(
   };
 };
 
-export const validatePartial = <T>(
-  schema: z.ZodSchema<T>,
+export const validatePartial = <T extends Record<string, any>>(
+  schema: z.ZodObject<any>,
   data: unknown,
   fields: (keyof T)[]
 ): ValidationResult<Partial<T>> => {
@@ -126,13 +126,16 @@ export const validatePartial = <T>(
   const result = safeValidate(partialSchema, data);
 
   if (!result.success || !result.data) {
-    return result;
+    return result as ValidationResult<Partial<T>>;
   }
 
   const filteredData: Partial<T> = {};
+  const validatedData = result.data as Record<string, any>;
+  
   for (const field of fields) {
-    if (field in result.data) {
-      filteredData[field] = result.data[field];
+    const fieldKey = field as string;
+    if (fieldKey in validatedData) {
+      (filteredData as Record<string, any>)[fieldKey] = validatedData[fieldKey];
     }
   }
 

@@ -751,6 +751,87 @@ class BookmarkService {
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  /**
+   * Upsert bookmarks from X API data for sync worker
+   */
+  async upsertBookmarks(
+    userId: string,
+    bookmarksData: any[]
+  ): Promise<{ newCount: number; updatedCount: number }> {
+    let newCount = 0;
+    let updatedCount = 0;
+
+    for (const tweet of bookmarksData) {
+      try {
+        // Extract user info from included data (assuming it's included)
+        const author = tweet.author || {
+          username: 'unknown',
+          name: 'Unknown User',
+          profile_image_url: null,
+        };
+
+        // Extract media URLs, links, hashtags, mentions
+        const mediaUrls = tweet.attachments?.media_keys?.map((key: string) => {
+          const media = tweet.media?.find((m: any) => m.media_key === key);
+          return media?.url || media?.preview_image_url;
+        }).filter(Boolean) || [];
+
+        const links = tweet.entities?.urls?.map((url: any) => url.expanded_url) || [];
+        const hashtags = tweet.entities?.hashtags?.map((tag: any) => tag.tag) || [];
+        const mentions = tweet.entities?.mentions?.map((mention: any) => mention.username) || [];
+
+        // Check if bookmark already exists
+        const existing = await this.getBookmarkByXTweetId(tweet.id);
+
+        if (existing) {
+          // Update if content differs
+          if (existing.content !== tweet.text) {
+            await this.updateBookmark(existing.id, {
+              content: tweet.text,
+              mediaUrls,
+              links,
+              hashtags,
+              mentions,
+            });
+            updatedCount++;
+          }
+        } else {
+          // Create new bookmark
+          await this.db.query(
+            `
+            INSERT INTO bookmarks (
+              user_id, x_tweet_id, content, author_username, author_display_name,
+              author_avatar_url, media_urls, links, hashtags, mentions, 
+              bookmarked_at, tags
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          `,
+            [
+              userId,
+              tweet.id,
+              tweet.text,
+              author.username,
+              author.name,
+              author.profile_image_url,
+              mediaUrls,
+              links,
+              hashtags,
+              mentions,
+              new Date(tweet.created_at),
+              [], // empty tags array
+            ]
+          );
+          newCount++;
+        }
+      } catch (error) {
+        console.error(`Error upserting bookmark ${tweet.id}:`, error);
+        // Continue with next bookmark
+      }
+    }
+
+    return { newCount, updatedCount };
+  }
 }
 
 export { BookmarkService };

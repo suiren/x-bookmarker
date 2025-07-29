@@ -456,9 +456,6 @@ router.put('/:id', apiRateLimit, async (req: Request, res: Response) => {
       return;
     }
 
-    const updateEntries = Object.entries(updates).filter(
-      ([, value]) => value !== undefined
-    );
     const setClause = updateEntries
       .map(([field], index) => `${field} = $${index + 3}`)
       .join(', ');
@@ -611,9 +608,6 @@ router.post('/bulk', apiRateLimit, async (req: Request, res: Response) => {
       return;
     }
 
-    const updateEntries = Object.entries(updates).filter(
-      ([, value]) => value !== undefined
-    );
     const setClause = updateEntries
       .map(([field], index) => `${field} = $${index + 3}`)
       .join(', ');

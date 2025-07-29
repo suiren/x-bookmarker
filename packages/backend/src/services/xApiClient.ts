@@ -38,12 +38,20 @@ import {
   RateLimitInfo,
   RateLimitInfoSchema,
 } from '@x-bookmarker/shared';
+import { CircuitBreaker, ExponentialBackoff, retryWithBackoff, CircuitBreakerError } from '../utils/circuitBreaker';
+import { logger } from '../utils/logger';
 
 interface XApiRequestConfig {
   endpoint: string;
   params?: Record<string, any>;
   headers?: Record<string, string>;
   retryCount?: number;
+  useCircuitBreaker?: boolean;
+}
+
+interface XApiErrorWithRetry extends XApiError {
+  shouldRetry: boolean;
+  retryAfter?: number;
 }
 
 interface XApiResponse<T> {
@@ -86,15 +94,26 @@ class XApiClient {
   private client: AxiosInstance;
   private config: XApiClientConfig;
   private rateLimitInfo: RateLimitInfo | null = null;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(config: XApiClientConfig) {
     this.config = config;
 
-    console.log(`🚀 X APIクライアント初期化`);
-    console.log(`📍 ベースURL: ${config.baseURL}`);
-    console.log(`⏱️ タイムアウト: ${config.timeout}ms`);
-    console.log(`🔄 リトライ回数: ${config.retryAttempts}`);
-    console.log(`🛡️ レート制限バッファ: ${config.rateLimitBuffer}`);
+    logger.info('X APIクライアント初期化', {
+      baseURL: config.baseURL,
+      timeout: config.timeout,
+      retryAttempts: config.retryAttempts,
+      rateLimitBuffer: config.rateLimitBuffer,
+    });
+
+    // サーキットブレーカーを初期化
+    this.circuitBreaker = new CircuitBreaker({
+      failureThreshold: 5, // 5回失敗でOPEN
+      successThreshold: 3, // 3回成功でCLOSED
+      timeout: 60000, // 60秒後にHALF_OPEN
+      monitoringPeriod: 300000, // 5分間の監視期間
+      name: 'X-API-Client',
+    });
 
     this.client = axios.create({
       baseURL: config.baseURL,
@@ -170,7 +189,7 @@ class XApiClient {
             detail: 'Bearer token is invalid or expired',
             value: null
           };
-          throw new XApiRequestError(apiError, status);
+          throw new XApiRequestError(apiError.errors ? apiError : { ...apiError, errors: [] }, status);
         }
 
         // Handle authorization errors
@@ -182,7 +201,7 @@ class XApiClient {
             detail: 'Required scopes or permissions are missing',
             value: null
           };
-          throw new XApiRequestError(apiError, status);
+          throw new XApiRequestError(apiError.errors ? apiError : { ...apiError, errors: [] }, status);
         }
 
         // Handle other X API errors
@@ -243,54 +262,69 @@ class XApiClient {
     mediaFields?: string[];
     expansions?: string[];
   }): Promise<XApiResponse<XBookmarksResponse>> {
-    console.log(`📚 ブックマーク取得開始: ユーザー ${params.userId}`);
-    
     const queryParams: Record<string, any> = {
       max_results: Math.min(params.maxResults || 100, 100), // 最大100件
     };
 
     if (params.paginationToken) {
       queryParams.pagination_token = params.paginationToken;
-      console.log(`📄 ページネーション: ${params.paginationToken.substring(0, 20)}...`);
     }
 
     if (params.tweetFields?.length) {
       queryParams['tweet.fields'] = params.tweetFields.join(',');
-      console.log(`🏷️ ツイートフィールド: ${params.tweetFields.join(', ')}`);
     }
 
     if (params.userFields?.length) {
       queryParams['user.fields'] = params.userFields.join(',');
-      console.log(`👤 ユーザーフィールド: ${params.userFields.join(', ')}`);
     }
 
     if (params.mediaFields?.length) {
       queryParams['media.fields'] = params.mediaFields.join(',');
-      console.log(`🖼️ メディアフィールド: ${params.mediaFields.join(', ')}`);
     }
 
     if (params.expansions?.length) {
       queryParams.expansions = params.expansions.join(',');
-      console.log(`🔗 展開フィールド: ${params.expansions.join(', ')}`);
     }
+
+    logger.info('ブックマーク取得開始', {
+      userId: params.userId,
+      maxResults: queryParams.max_results,
+      hasPagination: !!params.paginationToken,
+      fields: {
+        tweet: params.tweetFields?.length || 0,
+        user: params.userFields?.length || 0,
+        media: params.mediaFields?.length || 0,
+        expansions: params.expansions?.length || 0,
+      },
+    });
 
     const response = await this.makeRequest<XBookmarksResponse>({
       endpoint: `/users/${params.userId}/bookmarks`,
       params: queryParams,
+      useCircuitBreaker: true,
     });
 
     // Validate response structure
     const validationResult = XBookmarksResponseSchema.safeParse(response.data);
     if (!validationResult.success) {
-      console.error(`❌ X API レスポンス形式エラー:`, validationResult.error);
+      logger.error('X API レスポンス形式エラー', {
+        userId: params.userId,
+        error: validationResult.error.issues,
+        responseStructure: Object.keys(response.data || {}),
+      });
       throw new Error('Invalid X API bookmarks response format');
     }
 
     const bookmarksCount = validationResult.data.data?.length || 0;
     const hasNextPage = !!validationResult.data.meta?.next_token;
     
-    console.log(`✅ ブックマーク取得完了: ${bookmarksCount}件`);
-    console.log(`📑 次ページ: ${hasNextPage ? '有り' : '無し'}`);
+    logger.info('ブックマーク取得完了', {
+      userId: params.userId,
+      bookmarksCount,
+      hasNextPage,
+      nextToken: validationResult.data.meta?.next_token?.substring(0, 20),
+      circuitBreakerState: this.circuitBreaker.getState(),
+    });
 
     return {
       data: validationResult.data,
@@ -315,6 +349,7 @@ class XApiClient {
     return this.makeRequest({
       endpoint: `/users/${userId}`,
       params: queryParams,
+      useCircuitBreaker: true,
     });
   }
 
@@ -336,6 +371,7 @@ class XApiClient {
     return this.makeRequest({
       endpoint: '/users',
       params: queryParams,
+      useCircuitBreaker: true,
     });
   }
 
@@ -362,62 +398,33 @@ class XApiClient {
     return this.makeRequest({
       endpoint: '/tweets',
       params: queryParams,
+      useCircuitBreaker: true,
     });
   }
 
   /**
-   * Make a generic API request with retry logic
+   * Make a generic API request with enhanced error recovery
    */
   private async makeRequest<T>(
     config: XApiRequestConfig
   ): Promise<XApiResponse<T>> {
-    const maxRetries = config.retryCount || this.config.retryAttempts;
-    let lastError: Error;
+    const operation = async (): Promise<XApiResponse<T>> => {
+      const response = await this.client.get(config.endpoint, {
+        params: config.params,
+        headers: config.headers,
+      });
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await this.client.get(config.endpoint, {
-          params: config.params,
-          headers: config.headers,
-        });
+      return {
+        data: response.data,
+        rateLimit: this.rateLimitInfo!,
+        success: true,
+      };
+    };
 
-        return {
-          data: response.data,
-          rateLimit: this.rateLimitInfo!,
-          success: true,
-        };
-      } catch (error) {
-        lastError = error as Error;
-
-        // Don't retry on client errors (4xx except 429)
-        if (
-          error instanceof XApiRequestError &&
-          error.status >= 400 &&
-          error.status < 500 &&
-          error.status !== 429
-        ) {
-          throw error;
-        }
-
-        // Don't retry on the last attempt
-        if (attempt === maxRetries) {
-          break;
-        }
-
-        // Calculate exponential backoff delay
-        const baseDelay = this.config.retryDelay;
-        const exponentialDelay = baseDelay * Math.pow(2, attempt);
-        const jitterDelay = exponentialDelay + Math.random() * 1000;
-        const delay = Math.min(jitterDelay, 60000); // Cap at 60 seconds
-
-        console.log(
-          `🔄 X API request failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${Math.round(delay)}ms...`
-        );
-        await this.sleep(delay);
-      }
-    }
-
-    throw lastError!;
+    return this.executeWithRetry(operation, {
+      maxAttempts: config.retryCount || this.config.retryAttempts,
+      useCircuitBreaker: config.useCircuitBreaker !== false,
+    });
   }
 
   /**
@@ -546,6 +553,53 @@ class XApiClient {
   updateBearerToken(bearerToken: string): void {
     this.config.bearerToken = bearerToken;
     this.client.defaults.headers['Authorization'] = `Bearer ${bearerToken}`;
+  }
+
+  /**
+   * Refresh access token using refresh token
+   */
+  async refreshToken(refreshToken: string): Promise<{
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  }> {
+    console.log('🔄 アクセストークンを更新中...');
+
+    try {
+      const response = await axios.post('https://api.twitter.com/2/oauth2/token', {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: this.config.clientId,
+      }, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64')}`,
+        },
+        transformRequest: [(data) => {
+          return Object.keys(data)
+            .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`)
+            .join('&');
+        }],
+      });
+
+      console.log('✅ トークン更新成功');
+      
+      // Update the client's bearer token
+      this.updateBearerToken(response.data.access_token);
+
+      return response.data;
+    } catch (error) {
+      console.error('❌ トークン更新失敗:', error);
+      
+      if (axios.isAxiosError(error) && error.response) {
+        throw new XApiRequestError(
+          error.response.data,
+          error.response.status
+        );
+      }
+      
+      throw error;
+    }
   }
 }
 

@@ -25,11 +25,66 @@ export const setDatabase = (database: Pool): void => {
 };
 
 /**
+ * Development-only: Create test JWT token
+ * POST /auth/dev/token
+ */
+if (process.env.NODE_ENV === 'development') {
+  router.post('/dev/token', async (req: Request, res: Response) => {
+    try {
+      const testUserId = 'test-user-id';
+      const testUser = {
+        id: testUserId,
+        xUserId: 'test123456789',
+        username: 'testuser',
+        displayName: 'Test User',
+        avatarUrl: 'https://example.com/avatar.jpg',
+      };
+
+      // Generate JWT tokens for testing
+      const tokenPayload = {
+        userId: testUser.id,
+        xUserId: testUser.xUserId,
+        username: testUser.username,
+      };
+      const accessToken = jwtService.generateAccessToken(tokenPayload);
+      const refreshToken = jwtService.generateRefreshToken(tokenPayload);
+
+      res.json({
+        success: true,
+        data: {
+          user: testUser,
+          accessToken,
+          refreshToken,
+        },
+        message: 'Development test token created',
+      });
+    } catch (error) {
+      console.error('❌ Dev token creation error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create test token',
+        code: 'DEV_TOKEN_ERROR',
+      });
+    }
+  });
+}
+
+/**
  * Initiate X OAuth flow
  * GET /auth/x/oauth
  */
 router.get('/x/oauth', authRateLimit, async (req: Request, res: Response) => {
   try {
+    // Check if OAuth service is available (development mode compatibility)
+    if (!oauthService) {
+      res.status(503).json({
+        success: false,
+        error: 'OAuth service not available in development mode',
+        code: 'OAUTH_SERVICE_UNAVAILABLE',
+      });
+      return;
+    }
+
     const redirectUrl = (req.query.redirect as string) || '/';
 
     // Validate redirect URL for security
@@ -89,6 +144,15 @@ router.get(
           success: false,
           error: error_description || error,
           code: 'OAUTH_CALLBACK_ERROR',
+        });
+        return;
+      }
+
+      if (!oauthService) {
+        res.status(500).json({
+          success: false,
+          error: 'OAuth service not available',
+          code: 'OAUTH_SERVICE_ERROR',
         });
         return;
       }
