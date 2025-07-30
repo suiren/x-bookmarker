@@ -13,7 +13,19 @@ export const useSearchHistory = () => {
       const stored = localStorage.getItem(SEARCH_HISTORY_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setSearchHistory(Array.isArray(parsed) ? parsed : []);
+        if (Array.isArray(parsed)) {
+          // Migrate old format to new format
+          const migrated = parsed.map((item: any) => ({
+            ...item,
+            text: item.text || item.q || '',
+            categoryIds: item.categoryIds || (item.categoryId ? [item.categoryId] : []),
+            authorUsername: item.authorUsername || item.author || '',
+            // Convert date strings to Date objects if needed
+            dateFrom: item.dateFrom ? (typeof item.dateFrom === 'string' ? new Date(item.dateFrom) : item.dateFrom) : undefined,
+            dateTo: item.dateTo ? (typeof item.dateTo === 'string' ? new Date(item.dateTo) : item.dateTo) : undefined,
+          }));
+          setSearchHistory(migrated);
+        }
       }
     } catch (error) {
       console.error('Failed to load search history:', error);
@@ -32,18 +44,19 @@ export const useSearchHistory = () => {
 
   const addToHistory = (query: SearchQuery) => {
     // Don't save empty queries
-    if (!query.q && !query.categoryId && (!query.tags || query.tags.length === 0) && 
-        !query.author && !query.dateFrom && !query.dateTo) {
+    if (!query.text && (!query.categoryIds || query.categoryIds.length === 0) && 
+        (!query.tags || query.tags.length === 0) && 
+        !query.authorUsername && !query.dateFrom && !query.dateTo) {
       return;
     }
 
     setSearchHistory(prevHistory => {
       // Remove duplicate if exists (based on query content)
       const filtered = prevHistory.filter(item => 
-        !(item.q === query.q && 
-          item.categoryId === query.categoryId &&
+        !(item.text === query.text && 
+          JSON.stringify(item.categoryIds?.sort()) === JSON.stringify(query.categoryIds?.sort()) &&
           JSON.stringify(item.tags?.sort()) === JSON.stringify(query.tags?.sort()) &&
-          item.author === query.author &&
+          item.authorUsername === query.authorUsername &&
           item.dateFrom === query.dateFrom &&
           item.dateTo === query.dateTo)
       );
@@ -93,7 +106,7 @@ export const useSearchHistory = () => {
   // Get recent searches by category
   const getRecentSearchesByCategory = (categoryId?: string, limit = 5): SearchQuery[] => {
     return searchHistory
-      .filter(query => query.categoryId === categoryId)
+      .filter(query => query.categoryIds?.includes(categoryId || ''))
       .slice(0, limit);
   };
 

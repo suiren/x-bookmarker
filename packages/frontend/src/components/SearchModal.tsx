@@ -1,5 +1,5 @@
 import { useState, useEffect, memo } from 'react';
-import { X, Search, Filter, Calendar, Tag, User, SortAsc, SortDesc } from 'lucide-react';
+import { X, Search, Filter, Tag, User } from 'lucide-react';
 import { useCategories } from '../hooks/useCategories';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import type { SearchQuery, Category } from '../types';
@@ -16,13 +16,13 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
   const { data: searchHistory = [], addToHistory } = useSearchHistory();
 
   const [query, setQuery] = useState<Partial<SearchQuery>>({
-    q: '',
-    categoryId: undefined,
+    text: '',
+    categoryIds: [],
     tags: [],
-    dateFrom: '',
-    dateTo: '',
-    author: '',
-    sortBy: 'date',
+    dateFrom: undefined,
+    dateTo: undefined,
+    authorUsername: '',
+    sortBy: 'relevance',
     sortOrder: 'desc',
     ...initialQuery,
   });
@@ -68,13 +68,13 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
 
   const handleSearch = () => {
     const searchQuery: SearchQuery = {
-      q: query.q || '',
-      categoryId: query.categoryId,
+      text: query.text || '',
+      categoryIds: query.categoryIds || [],
       tags: selectedTags,
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,
-      author: query.author,
-      sortBy: query.sortBy || 'date',
+      authorUsername: query.authorUsername,
+      sortBy: query.sortBy || 'relevance',
       sortOrder: query.sortOrder || 'desc',
       limit: 20,
       offset: 0,
@@ -94,13 +94,13 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
 
   const clearQuery = () => {
     setQuery({
-      q: '',
-      categoryId: undefined,
+      text: '',
+      categoryIds: [],
       tags: [],
-      dateFrom: '',
-      dateTo: '',
-      author: '',
-      sortBy: 'date',
+      dateFrom: undefined,
+      dateTo: undefined,
+      authorUsername: '',
+      sortBy: 'relevance',
       sortOrder: 'desc',
     });
     setSelectedTags([]);
@@ -135,8 +135,8 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                value={query.q || ''}
-                onChange={(e) => setQuery(prev => ({ ...prev, q: e.target.value }))}
+                value={query.text || ''}
+                onChange={(e) => setQuery(prev => ({ ...prev, text: e.target.value }))}
                 placeholder="タイトル、説明、URLを検索..."
                 className="input pl-10 w-full"
               />
@@ -148,21 +148,32 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               カテゴリ
             </label>
-            <select
-              value={query.categoryId || ''}
-              onChange={(e) => setQuery(prev => ({ 
-                ...prev, 
-                categoryId: e.target.value || undefined 
-              }))}
-              className="input w-full"
-            >
-              <option value="">すべてのカテゴリ</option>
+            <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2">
               {categories.map((category: Category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
+                <label key={category.id} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={query.categoryIds?.includes(category.id) || false}
+                    onChange={(e) => {
+                      const currentIds = query.categoryIds || [];
+                      const newIds = e.target.checked
+                        ? [...currentIds, category.id]
+                        : currentIds.filter(id => id !== category.id);
+                      setQuery(prev => ({ ...prev, categoryIds: newIds }));
+                    }}
+                    className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="text-sm text-gray-900 dark:text-gray-100">
+                    {category.name}
+                  </span>
+                </label>
               ))}
-            </select>
+              {categories.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  カテゴリがありません
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Tags */}
@@ -262,8 +273,11 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
                     </label>
                     <input
                       type="date"
-                      value={query.dateFrom || ''}
-                      onChange={(e) => setQuery(prev => ({ ...prev, dateFrom: e.target.value }))}
+                      value={query.dateFrom ? query.dateFrom.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setQuery(prev => ({ 
+                        ...prev, 
+                        dateFrom: e.target.value ? new Date(e.target.value) : undefined 
+                      }))}
                       className="input w-full"
                     />
                   </div>
@@ -273,8 +287,11 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
                     </label>
                     <input
                       type="date"
-                      value={query.dateTo || ''}
-                      onChange={(e) => setQuery(prev => ({ ...prev, dateTo: e.target.value }))}
+                      value={query.dateTo ? query.dateTo.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setQuery(prev => ({ 
+                        ...prev, 
+                        dateTo: e.target.value ? new Date(e.target.value) : undefined 
+                      }))}
                       className="input w-full"
                     />
                   </div>
@@ -290,8 +307,8 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
                   <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    value={query.author || ''}
-                    onChange={(e) => setQuery(prev => ({ ...prev, author: e.target.value }))}
+                    value={query.authorUsername || ''}
+                    onChange={(e) => setQuery(prev => ({ ...prev, authorUsername: e.target.value }))}
                     placeholder="Xユーザー名"
                     className="input pl-10 w-full"
                   />
@@ -305,16 +322,16 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <select
-                    value={query.sortBy || 'date'}
+                    value={query.sortBy || 'relevance'}
                     onChange={(e) => setQuery(prev => ({ 
                       ...prev, 
-                      sortBy: e.target.value as 'date' | 'title' | 'relevance'
+                      sortBy: e.target.value as 'relevance' | 'date' | 'author'
                     }))}
                     className="input"
                   >
-                    <option value="date">日付</option>
-                    <option value="title">タイトル</option>
                     <option value="relevance">関連度</option>
+                    <option value="date">日付</option>
+                    <option value="author">作成者</option>
                   </select>
                   <select
                     value={query.sortOrder || 'desc'}
@@ -346,12 +363,18 @@ const SearchModal = memo<SearchModalProps>(({ isOpen, onClose, onSearch, initial
                     className="w-full text-left p-2 rounded-lg bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="text-sm text-gray-900 dark:text-gray-100">
-                      {item.q || '(キーワードなし)'}
+                      {item.text || '(キーワードなし)'}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {item.categoryId && categories.find(c => c.id === item.categoryId)?.name}
+                      {item.categoryIds && item.categoryIds.length > 0 && (
+                        <span>
+                          カテゴリ: {item.categoryIds.map(id => 
+                            categories.find(c => c.id === id)?.name
+                          ).filter(Boolean).join(', ')}
+                        </span>
+                      )}
                       {item.tags && item.tags.length > 0 && (
-                        <span className="ml-2">
+                        <span className={item.categoryIds && item.categoryIds.length > 0 ? "ml-2" : ""}>
                           タグ: {item.tags.join(', ')}
                         </span>
                       )}

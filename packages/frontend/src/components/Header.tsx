@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useBookmarkStore } from '../stores/bookmarkStore';
 import { useLogout } from '../hooks/useAuth';
-import { User, Settings, LogOut, Search, Menu, X } from 'lucide-react';
+import { User, Settings, LogOut, Search, Menu, X, Wifi, WifiOff } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import { useOfflineSync } from '../hooks/useOfflineSync';
+import { OfflineIndicator } from './OfflineIndicator';
 
 const Header = () => {
   const { user } = useAuthStore();
@@ -46,6 +48,7 @@ const Header = () => {
 
           {/* Right side - Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-4">
+            <OfflineIndicator />
             <ThemeToggle />
             
             {/* User Menu */}

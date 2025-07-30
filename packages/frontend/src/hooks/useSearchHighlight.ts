@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 
 interface SearchQuery {
-  q?: string;
-  categoryId?: string;
+  text?: string;
+  categoryIds?: string[];
   tags?: string[];
-  dateFrom?: string;
-  dateTo?: string;
-  author?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  authorUsername?: string;
 }
 
 /**
@@ -17,7 +17,7 @@ export const useSearchHighlight = (searchQuery: SearchQuery, quickSearch?: strin
     const terms: string[] = [];
     
     // Add text search terms
-    const queryText = searchQuery.q || quickSearch || '';
+    const queryText = searchQuery.text || quickSearch || '';
     if (queryText.trim()) {
       // Split by common delimiters and filter empty strings
       const textTerms = queryText
@@ -33,8 +33,8 @@ export const useSearchHighlight = (searchQuery: SearchQuery, quickSearch?: strin
     }
     
     // Add author terms
-    if (searchQuery.author && searchQuery.author.trim()) {
-      terms.push(searchQuery.author.toLowerCase());
+    if (searchQuery.authorUsername && searchQuery.authorUsername.trim()) {
+      terms.push(searchQuery.authorUsername.toLowerCase());
     }
     
     // Remove duplicates and very short terms

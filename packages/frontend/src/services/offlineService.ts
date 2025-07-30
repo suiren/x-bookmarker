@@ -2,7 +2,8 @@
  * オフラインデータ管理サービス (IndexedDB)
  */
 
-import { Bookmark, Category } from '@x-bookmarker/shared';
+import Fuse from 'fuse.js';
+import type { Bookmark, Category } from '@x-bookmarker/shared';
 
 // IndexedDBデータベース名とバージョン
 const DB_NAME = 'x-bookmarker-offline';
@@ -33,9 +34,51 @@ interface SearchIndexEntry {
   weight: number; // 検索重要度 (1-10)
 }
 
+// Fuse.js検索オプション設定
+interface FuseSearchOptions {
+  keys: Array<{
+    name: string;
+    weight: number;
+  }>;
+  threshold: number;
+  distance: number;
+  minMatchCharLength: number;
+  includeScore: boolean;
+  includeMatches: boolean;
+  shouldSort: true;
+  useExtendedSearch: boolean;
+  ignoreLocation: boolean;
+}
+
+// 検索フィルターオプション
+interface SearchFilters {
+  categoryIds?: string[];
+  tags?: string[];
+  authors?: string[];
+  dateRange?: {
+    start: Date;
+    end: Date;
+  };
+  isArchived?: boolean;
+}
+
+// 拡張検索オプション
+interface ExtendedSearchOptions {
+  userId: string;
+  query: string;
+  filters?: SearchFilters;
+  limit?: number;
+  offset?: number;
+  sortBy?: 'relevance' | 'date' | 'author';
+  sortDirection?: 'asc' | 'desc';
+}
+
 class OfflineService {
   private db: IDBDatabase | null = null;
   private dbPromise: Promise<IDBDatabase> | null = null;
+  private fuseCache: Map<string, Fuse<Bookmark>> = new Map();
+  private lastCacheUpdate: number = 0;
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5分
 
   /**
    * データベースを初期化
@@ -76,7 +119,7 @@ class OfflineService {
             keyPath: 'id'
           });
           categoryStore.createIndex('userId', 'userId');
-          categoryStore.createIndex('displayOrder', 'displayOrder');
+          categoryStore.createIndex('order', 'order');
         }
 
         // 検索インデックスストア
@@ -135,6 +178,10 @@ class OfflineService {
     }
 
     await this.promisifyRequest(transaction);
+    
+    // Fuseキャッシュをクリア（データが更新されたため）
+    this.clearFuseCache();
+    
     console.log(`✅ Saved ${bookmarks.length} bookmarks to IndexedDB`);
   }
 
@@ -204,6 +251,9 @@ class OfflineService {
     }
 
     await this.promisifyRequest(transaction);
+    
+    // Fuseキャッシュをクリア（データが更新されたため）
+    this.clearFuseCache();
   }
 
   // ===============================
@@ -238,7 +288,7 @@ class OfflineService {
     const categories = await this.promisifyRequest<Category[]>(index.getAll(userId));
     
     // 表示順でソート
-    return categories.sort((a, b) => a.displayOrder - b.displayOrder);
+    return categories.sort((a, b) => a.order - b.order);
   }
 
   // ===============================
@@ -246,7 +296,191 @@ class OfflineService {
   // ===============================
 
   /**
-   * オフライン検索を実行
+   * Fuse.jsの検索設定を取得
+   */
+  private getFuseOptions(): FuseSearchOptions {
+    return {
+      keys: [
+        { name: 'content', weight: 0.7 },
+        { name: 'tags', weight: 0.5 },
+        { name: 'authorDisplayName', weight: 0.3 },
+        { name: 'hashtags', weight: 0.4 }
+      ],
+      threshold: 0.3, // 0.0 = 完全一致, 1.0 = すべてマッチ
+      distance: 100, // 検索距離
+      minMatchCharLength: 1,
+      includeScore: true,
+      includeMatches: true,
+      shouldSort: true,
+      useExtendedSearch: true, // 高度な検索構文をサポート
+      ignoreLocation: true // 位置に関係なくマッチ
+    };
+  }
+
+  /**
+   * ユーザー用のFuseインスタンスを取得（キャッシュ付き）
+   */
+  private async getFuseInstance(userId: string): Promise<Fuse<Bookmark>> {
+    const now = Date.now();
+    const cacheKey = `fuse-${userId}`;
+    
+    // キャッシュが有効かチェック
+    if (this.fuseCache.has(cacheKey) && (now - this.lastCacheUpdate) < this.CACHE_TTL) {
+      return this.fuseCache.get(cacheKey)!;
+    }
+
+    // すべてのブックマークを取得
+    const bookmarks = await this.getBookmarks({ userId });
+    
+    // Fuseインスタンスを作成
+    const fuseInstance = new Fuse(bookmarks, this.getFuseOptions());
+    
+    // キャッシュに保存
+    this.fuseCache.set(cacheKey, fuseInstance);
+    this.lastCacheUpdate = now;
+    
+    return fuseInstance;
+  }
+
+  /**
+   * Fuseキャッシュをクリア
+   */
+  private clearFuseCache(): void {
+    this.fuseCache.clear();
+    this.lastCacheUpdate = 0;
+  }
+
+  /**
+   * フィルターを適用
+   */
+  private applyFilters(bookmarks: Bookmark[], filters?: SearchFilters): Bookmark[] {
+    if (!filters) return bookmarks;
+
+    let filtered = bookmarks;
+
+    // カテゴリフィルター
+    if (filters.categoryIds && filters.categoryIds.length > 0) {
+      filtered = filtered.filter(bookmark => 
+        filters.categoryIds!.includes(bookmark.categoryId || '')
+      );
+    }
+
+    // タグフィルター
+    if (filters.tags && filters.tags.length > 0) {
+      filtered = filtered.filter(bookmark =>
+        filters.tags!.some(tag => bookmark.tags.includes(tag))
+      );
+    }
+
+    // 作者フィルター
+    if (filters.authors && filters.authors.length > 0) {
+      filtered = filtered.filter(bookmark =>
+        filters.authors!.includes(bookmark.authorUsername)
+      );
+    }
+
+    // 日付範囲フィルター
+    if (filters.dateRange) {
+      const { start, end } = filters.dateRange;
+      filtered = filtered.filter(bookmark => {
+        const bookmarkDate = new Date(bookmark.bookmarkedAt);
+        return bookmarkDate >= start && bookmarkDate <= end;
+      });
+    }
+
+    // アーカイブフィルター
+    if (filters.isArchived !== undefined) {
+      filtered = filtered.filter(bookmark => bookmark.isArchived === filters.isArchived);
+    }
+
+    return filtered;
+  }
+
+  /**
+   * 検索結果をソート
+   */
+  private sortBookmarks(
+    bookmarks: Bookmark[], 
+    sortBy: 'relevance' | 'date' | 'author' = 'relevance',
+    sortDirection: 'asc' | 'desc' = 'desc'
+  ): Bookmark[] {
+    if (sortBy === 'relevance') {
+      // relevanceの場合はFuse.jsのスコアでソート済みなので、そのまま返す
+      return bookmarks;
+    }
+
+    const sorted = [...bookmarks].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'date':
+          comparison = new Date(a.bookmarkedAt).getTime() - new Date(b.bookmarkedAt).getTime();
+          break;
+        case 'author':
+          comparison = a.authorDisplayName.localeCompare(b.authorDisplayName);
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return sorted;
+  }
+
+  /**
+   * 拡張検索機能（Fuse.jsベース）
+   */
+  async searchBookmarksAdvanced(options: ExtendedSearchOptions): Promise<Bookmark[]> {
+    // 空のクエリの場合は通常の取得
+    if (!options.query.trim()) {
+      const bookmarks = await this.getBookmarks({ 
+        userId: options.userId,
+        limit: options.limit,
+        offset: options.offset
+      });
+      
+      const filtered = this.applyFilters(bookmarks, options.filters);
+      const sorted = this.sortBookmarks(filtered, options.sortBy, options.sortDirection);
+      
+      return sorted;
+    }
+
+    // Fuseインスタンスを取得
+    const fuse = await this.getFuseInstance(options.userId);
+
+    // 検索実行
+    const searchLimit = options.limit && options.offset 
+      ? options.limit + options.offset 
+      : options.limit;
+    
+    const results = fuse.search(options.query, {
+      limit: searchLimit
+    });
+
+    // 検索結果からブックマークを抽出
+    let bookmarks = results.map(result => result.item);
+
+    // フィルターを適用
+    bookmarks = this.applyFilters(bookmarks, options.filters);
+
+    // ソート（relevanceの場合はFuse.jsでソート済み）
+    if (options.sortBy && options.sortBy !== 'relevance') {
+      bookmarks = this.sortBookmarks(bookmarks, options.sortBy, options.sortDirection);
+    }
+
+    // ページネーション
+    if (options.offset || options.limit) {
+      const start = options.offset || 0;
+      const end = start + (options.limit || bookmarks.length);
+      bookmarks = bookmarks.slice(start, end);
+    }
+
+    return bookmarks;
+  }
+
+  /**
+   * オフライン検索を実行（後方互換性のため）
+   * @deprecated searchBookmarksAdvancedを使用してください
    */
   async searchBookmarks(options: {
     userId: string;
@@ -254,83 +488,65 @@ class OfflineService {
     categoryId?: string;
     limit?: number;
   }): Promise<Bookmark[]> {
-    if (!options.query.trim()) {
-      return this.getBookmarks({ 
-        userId: options.userId, 
-        categoryId: options.categoryId,
-        limit: options.limit 
-      });
-    }
+    return this.searchBookmarksAdvanced({
+      userId: options.userId,
+      query: options.query,
+      filters: options.categoryId ? { categoryIds: [options.categoryId] } : undefined,
+      limit: options.limit,
+      sortBy: 'relevance'
+    });
+  }
 
-    const db = await this.getDB();
-    const transaction = db.transaction([STORES.SEARCH_INDEX, STORES.BOOKMARKS], 'readonly');
-    const searchStore = transaction.objectStore(STORES.SEARCH_INDEX);
-    const bookmarkStore = transaction.objectStore(STORES.BOOKMARKS);
+  /**
+   * タグでブックマークを検索
+   */
+  async searchByTags(userId: string, tags: string[]): Promise<Bookmark[]> {
+    return this.searchBookmarksAdvanced({
+      userId,
+      query: '', // 空のクエリでフィルターのみ適用
+      filters: { tags },
+      sortBy: 'date'
+    });
+  }
 
-    // 検索クエリを正規化
-    const normalizedQuery = options.query.toLowerCase().trim();
-    const searchTerms = normalizedQuery.split(/\s+/);
+  /**
+   * 作者でブックマークを検索
+   */
+  async searchByAuthor(userId: string, authorUsername: string): Promise<Bookmark[]> {
+    return this.searchBookmarksAdvanced({
+      userId,
+      query: '', // 空のクエリでフィルターのみ適用
+      filters: { authors: [authorUsername] },
+      sortBy: 'date'
+    });
+  }
 
-    // 検索インデックスから候補を取得
-    const textIndex = searchStore.index('text');
-    const allEntries = await this.promisifyRequest<SearchIndexEntry[]>(textIndex.getAll());
+  /**
+   * 日付範囲でブックマークを検索
+   */
+  async searchByDateRange(
+    userId: string, 
+    startDate: Date, 
+    endDate: Date
+  ): Promise<Bookmark[]> {
+    return this.searchBookmarksAdvanced({
+      userId,
+      query: '', // 空のクエリでフィルターのみ適用
+      filters: { dateRange: { start: startDate, end: endDate } },
+      sortBy: 'date'
+    });
+  }
 
-    // スコアリング
-    const scoreMap = new Map<string, number>();
-
-    for (const entry of allEntries) {
-      const entryText = entry.text.toLowerCase();
-      let score = 0;
-
-      for (const term of searchTerms) {
-        if (entryText.includes(term)) {
-          // 完全一致にはより高いスコア
-          if (entryText === term) {
-            score += entry.weight * 3;
-          } 
-          // 開始一致
-          else if (entryText.startsWith(term)) {
-            score += entry.weight * 2;
-          }
-          // 部分一致
-          else {
-            score += entry.weight;
-          }
-        }
-      }
-
-      if (score > 0) {
-        const currentScore = scoreMap.get(entry.bookmarkId) || 0;
-        scoreMap.set(entry.bookmarkId, currentScore + score);
-      }
-    }
-
-    // スコア順にソートしてブックマークIDを取得
-    const rankedBookmarkIds = Array.from(scoreMap.entries())
-      .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
-      .map(([bookmarkId]) => bookmarkId);
-
-    // ブックマークを取得
-    const bookmarks: Bookmark[] = [];
-    for (const bookmarkId of rankedBookmarkIds) {
-      const bookmark = await this.promisifyRequest<Bookmark>(
-        bookmarkStore.get(bookmarkId)
-      );
-      
-      if (bookmark && bookmark.userId === options.userId) {
-        // カテゴリフィルタ
-        if (!options.categoryId || bookmark.categoryId === options.categoryId) {
-          bookmarks.push(bookmark);
-        }
-      }
-
-      // 制限に達したら終了
-      if (options.limit && bookmarks.length >= options.limit) {
-        break;
-      }
-    }
-
-    return bookmarks;
+  /**
+   * カテゴリ別ブックマーク検索
+   */
+  async searchByCategories(userId: string, categoryIds: string[]): Promise<Bookmark[]> {
+    return this.searchBookmarksAdvanced({
+      userId,
+      query: '', // 空のクエリでフィルターのみ適用
+      filters: { categoryIds },
+      sortBy: 'date'
+    });
   }
 
   // ===============================
@@ -397,6 +613,10 @@ class OfflineService {
     }
 
     await this.promisifyRequest(transaction);
+    
+    // Fuseキャッシュもクリア
+    this.clearFuseCache();
+    
     console.log('✅ All offline data cleared');
   }
 
@@ -406,6 +626,7 @@ class OfflineService {
 
   /**
    * ブックマーク用の検索インデックスを構築
+   * Fuse.jsベースの検索では主にlegacyサポート用
    */
   private async buildSearchIndexForBookmark(
     searchStore: IDBObjectStore, 
@@ -422,42 +643,45 @@ class OfflineService {
     // 新しいインデックスを作成
     const indexEntries: SearchIndexEntry[] = [];
 
-    // タイトル (重要度: 10)
-    if (bookmark.title) {
+    // コンテンツ (重要度: 7 - Fuse.jsの重み0.7に対応)
+    if (bookmark.content) {
       indexEntries.push({
-        id: `${bookmark.id}-title`,
-        text: bookmark.title,
+        id: `${bookmark.id}-content`,
+        text: bookmark.content,
         bookmarkId: bookmark.id,
-        weight: 10
+        weight: 7
       });
     }
 
-    // 説明文 (重要度: 5)
-    if (bookmark.description) {
+    // 作者表示名 (重要度: 3 - Fuse.jsの重み0.3に対応)
+    if (bookmark.authorDisplayName) {
       indexEntries.push({
-        id: `${bookmark.id}-description`,
-        text: bookmark.description,
+        id: `${bookmark.id}-author`,
+        text: bookmark.authorDisplayName,
         bookmarkId: bookmark.id,
-        weight: 5
+        weight: 3
       });
     }
 
-    // URL (重要度: 3)
-    indexEntries.push({
-      id: `${bookmark.id}-url`,
-      text: bookmark.url,
-      bookmarkId: bookmark.id,
-      weight: 3
-    });
-
-    // タグ (重要度: 7)
+    // タグ (重要度: 5 - Fuse.jsの重み0.5に対応)
     for (let i = 0; i < bookmark.tags.length; i++) {
       const tag = bookmark.tags[i];
       indexEntries.push({
         id: `${bookmark.id}-tag-${i}`,
         text: tag,
         bookmarkId: bookmark.id,
-        weight: 7
+        weight: 5
+      });
+    }
+
+    // ハッシュタグ (重要度: 4 - Fuse.jsの重み0.4に対応)
+    for (let i = 0; i < bookmark.hashtags.length; i++) {
+      const hashtag = bookmark.hashtags[i];
+      indexEntries.push({
+        id: `${bookmark.id}-hashtag-${i}`,
+        text: hashtag,
+        bookmarkId: bookmark.id,
+        weight: 4
       });
     }
 

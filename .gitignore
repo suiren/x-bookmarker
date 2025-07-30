@@ -95,6 +95,9 @@ Desktop.ini
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# Claude Code project structure (keep this for efficiency)
+!.claude/
+
 # Docker
 .dockerignore
 

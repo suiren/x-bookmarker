@@ -1,0 +1,5 @@
+<svg width="180" height="180" xmlns="http://www.w3.org/2000/svg">
+  <rect width="180" height="180" fill="#1da1f2" rx="18"/>
+  <text x="50%" y="60%" font-family="Arial, sans-serif" font-size="54" fill="white" text-anchor="middle" font-weight="bold">X</text>
+  <text x="50%" y="85%" font-family="Arial, sans-serif" font-size="27" fill="white" text-anchor="middle">BM</text>
+</svg>

@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { PWAUpdateNotification } from './components/PWAUpdateNotification';
 import { OfflineBanner } from './components/OfflineIndicator';
+import { FloatingOfflineIndicator } from './components/offline/OfflineIndicator';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { setupReconnectHandlers } from './lib/offlineQuery';
 import { useQueryClient } from '@tanstack/react-query';
@@ -88,6 +89,9 @@ function App() {
       
       {/* PWAアップデート通知 */}
       <PWAUpdateNotification />
+      
+      {/* オフライン状態インジケーター */}
+      <FloatingOfflineIndicator />
     </>
   );
 }

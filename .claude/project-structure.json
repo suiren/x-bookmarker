@@ -1,0 +1,125 @@
+{
+  "projectInfo": {
+    "name": "x-bookmarker",
+    "description": "X（旧Twitter）ブックマーク管理アプリケーション",
+    "rootDirectory": "/home/suiren/project/x-bookmarker"
+  },
+  "coreFiles": {
+    "requirements": "requirements.md",
+    "design": "design.md",
+    "tasks": "task.md",
+    "instructions": "CLAUDE.md",
+    "readme": "README.md"
+  },
+  "configuration": {
+    "docker": "docker-compose.yml",
+    "typescript": "tsconfig.json",
+    "eslint": "eslint.config.js",
+    "nginx": "nginx.conf",
+    "gitignore": ".gitignore"
+  },
+  "packageStructure": {
+    "root": {
+      "packageJson": "package.json",
+      "lockFile": "package-lock.json"
+    },
+    "packages": {
+      "frontend": "packages/frontend",
+      "backend": "packages/backend", 
+      "shared": "packages/shared"
+    }
+  },
+  "directories": {
+    "documentation": {
+      "path": "docs",
+      "description": "アーキテクチャ・実装ガイド・API仕様書",
+      "keyFiles": [
+        "docs/auth-architecture.md",
+        "docs/bookmark-architecture.md",
+        "docs/search-architecture.md",
+        "docs/offline-architecture.md",
+        "docs/data-management-architecture.md",
+        "docs/frontend-performance-architecture.md",
+        "docs/backend-performance-architecture.md"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "description": "開発・デプロイメント用スクリプト",
+      "keyFiles": [
+        "scripts/git-workflow.sh"
+      ]
+    },
+    "frontend": {
+      "path": "packages/frontend",
+      "src": "packages/frontend/src",
+      "components": "packages/frontend/src/components",
+      "pages": "packages/frontend/src/pages",
+      "services": "packages/frontend/src/services",
+      "hooks": "packages/frontend/src/hooks",
+      "public": "packages/frontend/public"
+    },
+    "backend": {
+      "path": "packages/backend",
+      "src": "packages/backend/src",
+      "routes": "packages/backend/src/routes", 
+      "services": "packages/backend/src/services",
+      "middleware": "packages/backend/src/middleware",
+      "database": "packages/backend/src/database"
+    },
+    "shared": {
+      "path": "packages/shared",
+      "src": "packages/shared/src",
+      "types": "packages/shared/src/types",
+      "schemas": "packages/shared/src/schemas",
+      "utils": "packages/shared/src/utils"
+    }
+  },
+  "developmentWorkflow": {
+    "taskFile": "task.md",
+    "taskFileFormat": "マークダウン形式、各タスクに状態アイコン（🔴未実装、🟢最小実装済、✅リファクタリング済、⚠️ブロック済）",
+    "gitWorkflow": {
+      "branches": {
+        "feature": "feature/機能名",
+        "fix": "fix/修正内容", 
+        "refactor": "refactor/対象",
+        "docs": "docs/対象"
+      },
+      "helper": "scripts/git-workflow.sh"
+    }
+  },
+  "testingStructure": {
+    "backend": "packages/backend/src/**/__tests__/",
+    "frontend": "packages/frontend/src/**/__tests__/",
+    "shared": "packages/shared/src/**/__tests__/"
+  },
+  "buildOutputs": {
+    "frontend": "packages/frontend/dist",
+    "backend": "packages/backend/dist",
+    "shared": "packages/shared/dist"
+  },
+  "currentPhase": {
+    "phase": "Phase 2: 機能拡張・パフォーマンス最適化",
+    "nextTask": "17. AI分析サービス実装",
+    "completedTasks": 16,
+    "totalTasks": 25
+  },
+  "quickNavigation": {
+    "mostUsedFiles": [
+      "task.md",
+      "requirements.md", 
+      "design.md",
+      "CLAUDE.md",
+      "packages/frontend/src/",
+      "packages/backend/src/",
+      "docs/"
+    ],
+    "currentFocus": [
+      "packages/frontend/src/services/offlineService.ts",
+      "packages/frontend/src/services/syncService.ts",
+      "packages/frontend/src/hooks/useOfflineBookmarks.ts",
+      "packages/frontend/src/components/offline/OfflineIndicator.tsx",
+      "docs/offline-implementation-guide.md"
+    ]
+  }
+}
