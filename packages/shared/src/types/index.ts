@@ -14,7 +14,6 @@ export interface User {
   updatedAt: Date;
 }
 
-
 export interface Bookmark {
   id: string;
   userId: string;
@@ -58,7 +57,6 @@ export interface Tag {
   createdAt: Date;
   updatedAt: Date;
 }
-
 
 export interface SearchResult {
   bookmarks: Bookmark[];
@@ -161,5 +159,5 @@ export interface AIAnalysisResult {
 
 export type SortDirection = 'asc' | 'desc';
 export type ViewMode = 'grid' | 'list';
-export type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'system';
 export type SyncStatus = 'pending' | 'running' | 'completed' | 'failed';

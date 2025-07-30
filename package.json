@@ -2,6 +2,7 @@
   "name": "x-bookmarker",
   "version": "1.0.0",
   "description": "Advanced bookmark management application for X (Twitter)",
+  "type": "module",
   "private": true,
   "workspaces": [
     "packages/*"
@@ -12,7 +13,7 @@
     "dev:frontend": "npm run dev --workspace=@x-bookmarker/frontend",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
-    "lint": "eslint packages/shared/src --ext .ts",
+    "lint": "eslint packages/*/src/**/*.{ts,tsx}",
     "format": "npm run format --workspaces",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
@@ -34,5 +35,8 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "fuse.js": "^7.1.0"
   }
 }
