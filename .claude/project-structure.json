@@ -115,11 +115,17 @@
       "docs/"
     ],
     "currentFocus": [
-      "packages/frontend/src/services/offlineService.ts",
-      "packages/frontend/src/services/syncService.ts",
-      "packages/frontend/src/hooks/useOfflineBookmarks.ts",
-      "packages/frontend/src/components/offline/OfflineIndicator.tsx",
-      "docs/offline-implementation-guide.md"
-    ]
+      ".claude/task-completion-template.md",
+      ".claude/project-structure.json",
+      "CLAUDE.md",
+      "task.md",
+      "packages/frontend/src/services/offlineService.ts"
+    ],
+    "processManagement": {
+      "taskCompletionTemplate": ".claude/task-completion-template.md",
+      "todoSystem": "TodoWriteツールで標準チェックリスト使用",
+      "gitWorkflow": "必須 - 全タスクでコミット・プッシュ実行",
+      "verificationProcess": "CLAUDE.md要件確認 + 最終検証"
+    }
   }
 }
