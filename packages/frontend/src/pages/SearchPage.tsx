@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Search, Filter, TrendingUp, Clock, Tag, Grid, List, Loader2, RefreshCw } from 'lucide-react';
+import { Search, Filter, TrendingUp, Tag, Grid, List, Loader2, RefreshCw } from 'lucide-react';
 import { useBookmarks } from '../hooks/useBookmarks';
 import { useCategories } from '../hooks/useCategories';
 import { useSearchHistory } from '../hooks/useSearchHistory';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { useOfflineBookmarks, useOfflineCategories, useOfflineSearch } from '../hooks/useOfflineBookmarks';
 import SearchModal from '../components/SearchModal';
 import SearchBar from '../components/search/SearchBar';
 import SearchFacets from '../components/search/SearchFacets';
@@ -27,43 +29,97 @@ const SearchPage = () => {
   }>({});
   const limit = 20;
 
-  const { data: categories = [] } = useCategories();
-  const { data: searchHistory, getPopularTags } = useSearchHistory();
+  const { isOnline } = useNetworkStatus();
+  const { getPopularTags } = useSearchHistory();
 
-  // API query for search results
+  // オンライン・オフライン対応のデータフェッチ
+  const { data: onlineCategories = [] } = useCategories();
+  const { categories: offlineCategories = [] } = useOfflineCategories();
+  const categories = isOnline ? onlineCategories : offlineCategories;
+
+  // オンライン検索
   const {
-    data: searchResults,
-    isLoading,
-    isError,
-    error,
-    refetch,
+    data: onlineSearchResults,
+    isLoading: onlineLoading,
+    isError: onlineError,
+    error: onlineErrorDetails,
+    refetch: refetchOnline,
   } = useBookmarks({
-    text: searchQuery.q || quickSearch || undefined,
-    categoryIds: searchQuery.categoryId ? [searchQuery.categoryId] : undefined,
+    text: searchQuery.text || quickSearch || undefined,
+    categoryIds: searchQuery.categoryIds,
     tags: searchQuery.tags,
     dateFrom: searchQuery.dateFrom,
     dateTo: searchQuery.dateTo,
-    author: searchQuery.author,
+    authorUsername: searchQuery.authorUsername,
     sortBy: searchQuery.sortBy || 'relevance',
     sortOrder: searchQuery.sortOrder || 'desc',
     limit,
     offset: (page - 1) * limit,
   });
 
-  const bookmarks = searchResults?.data || [];
-  const totalCount = searchResults?.pagination?.total || 0;
+  // オフライン検索
+  const { 
+    searchResults: offlineSearchResults, 
+    isSearching: offlineLoading, 
+    searchError: offlineError,
+    searchBookmarks: performOfflineSearch 
+  } = useOfflineSearch();
+
+  // オフライン検索の実行
+  useState(() => {
+    if (!isOnline && (searchQuery.text || quickSearch)) {
+      performOfflineSearch({
+        query: searchQuery.text || quickSearch || '',
+        categoryIds: searchQuery.categoryIds,
+        tags: searchQuery.tags,
+        authors: searchQuery.authorUsername ? [searchQuery.authorUsername] : undefined,
+        dateRange: (searchQuery.dateFrom && searchQuery.dateTo) ? {
+          start: new Date(searchQuery.dateFrom),
+          end: new Date(searchQuery.dateTo)
+        } : undefined,
+        sortBy: searchQuery.sortBy || 'relevance',
+        sortDirection: searchQuery.sortOrder || 'desc',
+        limit,
+        offset: (page - 1) * limit,
+      });
+    }
+  });
+
+  // 結果の統合
+  const bookmarks = isOnline 
+    ? (onlineSearchResults?.data || [])
+    : offlineSearchResults;
+  
+  const totalCount = isOnline 
+    ? (onlineSearchResults?.pagination?.total || 0)
+    : offlineSearchResults.length;
+  
   const totalPages = Math.ceil(totalCount / limit);
+  const isLoading = isOnline ? onlineLoading : offlineLoading;
+  const isError = isOnline ? onlineError : !!offlineError;
+  const error = isOnline ? onlineErrorDetails : offlineError;
+  const refetch = isOnline ? refetchOnline : () => performOfflineSearch({
+    query: searchQuery.text || quickSearch || '',
+    categoryIds: searchQuery.categoryIds,
+    tags: searchQuery.tags,
+    authors: searchQuery.authorUsername ? [searchQuery.authorUsername] : undefined,
+    sortBy: searchQuery.sortBy || 'relevance',
+    sortDirection: searchQuery.sortOrder || 'desc',
+    limit,
+    offset: (page - 1) * limit,
+  });
+
   const popularTags = getPopularTags(15);
 
   // Get search terms for highlighting
   const { searchTerms } = useSearchHighlight(
     {
-      q: searchQuery.q,
-      categoryId: searchQuery.categoryId,
+      text: searchQuery.text,
+      categoryIds: searchQuery.categoryIds,
       tags: searchQuery.tags,
       dateFrom: searchQuery.dateFrom,
       dateTo: searchQuery.dateTo,
-      author: searchQuery.author,
+      authorUsername: searchQuery.authorUsername,
     },
     quickSearch
   );
@@ -82,7 +138,7 @@ const SearchPage = () => {
   };
 
   const handleQuickSearch = (query: string) => {
-    setSearchQuery({ q: query });
+    setSearchQuery({ text: query });
     setQuickSearch(query);
     setPage(1);
   };
@@ -97,10 +153,10 @@ const SearchPage = () => {
         setSearchQuery({ tags: [suggestion.value] });
         break;
       case 'category':
-        setSearchQuery({ categoryId: suggestion.data?.id || suggestion.value });
+        setSearchQuery({ categoryIds: [suggestion.data?.id || suggestion.value] });
         break;
       case 'author':
-        setSearchQuery({ author: suggestion.value });
+        setSearchQuery({ authorUsername: suggestion.value });
         break;
     }
     setQuickSearch('');
@@ -117,7 +173,7 @@ const SearchPage = () => {
 
     switch (facet.type) {
       case 'category':
-        newQuery.categoryId = facet.value;
+        newQuery.categoryIds = [facet.value];
         newFacets.categories = [facet.value];
         break;
       case 'tag':
@@ -131,7 +187,7 @@ const SearchPage = () => {
         }
         break;
       case 'author':
-        newQuery.author = facet.value;
+        newQuery.authorUsername = facet.value;
         newFacets.authors = [facet.value];
         break;
     }
@@ -149,7 +205,7 @@ const SearchPage = () => {
   };
 
   const handleCategoryClick = (categoryId: string) => {
-    setSearchQuery({ categoryId });
+    setSearchQuery({ categoryIds: [categoryId] });
     setQuickSearch('');
     setPage(1);
   };
@@ -161,7 +217,6 @@ const SearchPage = () => {
     setPage(1);
   };
 
-  const recentSearches = searchHistory.slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -258,7 +313,7 @@ const SearchPage = () => {
         <div className="card p-6">
           <SearchHistory
             onSearchSelect={handleAdvancedSearch}
-            currentQuery={searchQuery}
+            currentQuery={searchQuery as SearchQuery}
             maxItems={5}
             showHeader={true}
           />
@@ -272,12 +327,12 @@ const SearchPage = () => {
           <div className="lg:col-span-1 space-y-6">
             <SearchFacets
               searchQuery={{
-                q: searchQuery.q || quickSearch || undefined,
-                categoryId: searchQuery.categoryId,
+                text: searchQuery.text || quickSearch || undefined,
+                categoryIds: searchQuery.categoryIds,
                 tags: searchQuery.tags,
                 dateFrom: searchQuery.dateFrom,
                 dateTo: searchQuery.dateTo,
-                author: searchQuery.author,
+                authorUsername: searchQuery.authorUsername,
               }}
               onFacetSelect={handleFacetSelect}
               selectedFacets={selectedFacets}
@@ -287,7 +342,7 @@ const SearchPage = () => {
             <div className="card p-4">
               <SearchHistory
                 onSearchSelect={handleAdvancedSearch}
-                currentQuery={searchQuery}
+                currentQuery={searchQuery as SearchQuery}
                 maxItems={3}
                 showHeader={true}
               />
@@ -323,7 +378,7 @@ const SearchPage = () => {
                 sortBy={searchQuery.sortBy || 'relevance'}
                 sortOrder={searchQuery.sortOrder || 'desc'}
                 onSortChange={(sortBy, sortOrder) => {
-                  setSearchQuery(prev => ({ ...prev, sortBy, sortOrder }));
+                  setSearchQuery(prev => ({ ...prev, sortBy, sortOrder } as Partial<SearchQuery>));
                   setPage(1);
                 }}
                 disabled={isLoading}
@@ -387,44 +442,46 @@ const SearchPage = () => {
               </div>
             </div>
           ) : bookmarks.length > 0 ? (
-            <div
-              className={clsx(
-                'gap-6',
-                viewMode === 'grid'
-                  ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-                  : 'space-y-4'
-              )}
-            >
-              {bookmarks.map((bookmark: Bookmark) => (
-                <SearchBookmarkCard
-                  key={bookmark.id}
-                  bookmark={bookmark}
-                  searchTerms={searchTerms}
-                  viewMode={viewMode}
-                  onTagClick={handleTagClick}
-                  onAuthorClick={(username) => {
-                    setSearchQuery({ author: username });
-                    setQuickSearch('');
-                    setPage(1);
-                  }}
-                  onCategoryClick={handleCategoryClick}
-                />
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalCount > limit && (
-              <div className="mt-8">
-                <Pagination
-                  currentPage={page}
-                  totalPages={totalPages}
-                  totalItems={totalCount}
-                  itemsPerPage={limit}
-                  onPageChange={setPage}
-                  showInfo={true}
-                />
+            <>
+              <div
+                className={clsx(
+                  'gap-6',
+                  viewMode === 'grid'
+                    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                    : 'space-y-4'
+                )}
+              >
+                {bookmarks.map((bookmark: Bookmark) => (
+                  <SearchBookmarkCard
+                    key={bookmark.id}
+                    bookmark={bookmark}
+                    searchTerms={searchTerms}
+                    viewMode={viewMode}
+                    onTagClick={handleTagClick}
+                    onAuthorClick={(username) => {
+                      setSearchQuery({ authorUsername: username });
+                      setQuickSearch('');
+                      setPage(1);
+                    }}
+                    onCategoryClick={handleCategoryClick}
+                  />
+                ))}
               </div>
-            )}
+
+              {/* Pagination */}
+              {totalCount > limit && (
+                <div className="mt-8">
+                  <Pagination
+                    currentPage={page}
+                    totalPages={totalPages}
+                    totalItems={totalCount}
+                    itemsPerPage={limit}
+                    onPageChange={setPage}
+                    showInfo={true}
+                  />
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-12">
               <div className="max-w-sm mx-auto">
@@ -448,6 +505,7 @@ const SearchPage = () => {
               </div>
             </div>
           )}
+          </div>
         </div>
       )}
 

@@ -5,12 +5,12 @@ import { useSearchFacets } from '../../hooks/useSearchSuggestions';
 import type { SearchFacets as SearchFacetsType } from '../../hooks/useSearchSuggestions';
 
 interface SearchQuery {
-  q?: string;
-  categoryId?: string;
+  text?: string;
+  categoryIds?: string[];
   tags?: string[];
-  dateFrom?: string;
-  dateTo?: string;
-  author?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  authorUsername?: string;
 }
 
 interface SearchFacetsProps {

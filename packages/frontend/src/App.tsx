@@ -1,9 +1,15 @@
 import { Routes, Route } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useAuthState } from './hooks/useAuth';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
+import { PWAUpdateNotification } from './components/PWAUpdateNotification';
+import { OfflineBanner } from './components/OfflineIndicator';
+import { FloatingOfflineIndicator } from './components/offline/OfflineIndicator';
+import { useOfflineSync } from './hooks/useOfflineSync';
+import { setupReconnectHandlers } from './lib/offlineQuery';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Eager loading for critical pages (immediately needed)
 import LoginPage from './pages/LoginPage';
@@ -29,6 +35,16 @@ const PageLoadingFallback = () => (
 
 function App() {
   const { isAuthenticated, isCheckingAuth } = useAuthState();
+  const queryClient = useQueryClient();
+  
+  // オフライン同期を初期化
+  useOfflineSync();
+
+  // ネットワーク再接続ハンドラーを設定
+  useEffect(() => {
+    const cleanup = setupReconnectHandlers(queryClient);
+    return cleanup;
+  }, [queryClient]);
 
   // Show loading screen while checking authentication
   if (isCheckingAuth) {
@@ -44,6 +60,9 @@ function App() {
 
   return (
     <>
+      {/* オフライン状態バナー */}
+      <OfflineBanner />
+      
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
@@ -67,6 +86,12 @@ function App() {
           }
         />
       </Routes>
+      
+      {/* PWAアップデート通知 */}
+      <PWAUpdateNotification />
+      
+      {/* オフライン状態インジケーター */}
+      <FloatingOfflineIndicator />
     </>
   );
 }
