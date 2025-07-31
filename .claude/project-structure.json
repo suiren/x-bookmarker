@@ -40,7 +40,9 @@
         "docs/offline-architecture.md",
         "docs/data-management-architecture.md",
         "docs/frontend-performance-architecture.md",
-        "docs/backend-performance-architecture.md"
+        "docs/backend-performance-architecture.md",
+        "docs/ai-analysis-architecture.md",
+        "docs/ai-api-reference.md"
       ]
     },
     "scripts": {
@@ -99,9 +101,9 @@
     "shared": "packages/shared/dist"
   },
   "currentPhase": {
-    "phase": "Phase 2: 機能拡張・パフォーマンス最適化",
-    "nextTask": "17. AI分析サービス実装",
-    "completedTasks": 16,
+    "phase": "Phase 3: 高度な機能・AI統合",
+    "nextTask": "18. 高度なUI/UX機能",
+    "completedTasks": 17,
     "totalTasks": 25
   },
   "quickNavigation": {

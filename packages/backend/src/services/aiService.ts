@@ -2,9 +2,39 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { Bookmark, Category, AIAnalysisResult } from '@x-bookmarker/shared/types';
 
+// Custom error classes for better error handling
+export class AIConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AIConfigurationError';
+  }
+}
+
+export class AIProviderError extends Error {
+  public readonly provider: string;
+  public readonly originalError?: Error;
+
+  constructor(message: string, provider: string, originalError?: Error) {
+    super(message);
+    this.name = 'AIProviderError';
+    this.provider = provider;
+    this.originalError = originalError;
+  }
+}
+
+export class AIAnalysisError extends Error {
+  public readonly retryable: boolean;
+
+  constructor(message: string, retryable = false) {
+    super(message);
+    this.name = 'AIAnalysisError';
+    this.retryable = retryable;
+  }
+}
+
 export interface AIProvider {
   name: 'openai' | 'anthropic' | 'huggingface';
-  client: any;
+  client: OpenAI | Anthropic | null;
   analyze: (content: string, existingCategories: Category[]) => Promise<AIAnalysisResult>;
 }
 
@@ -31,8 +61,32 @@ export class AIService {
       enabled: process.env.AI_ENABLED === 'true'
     };
 
+    // Validate configuration
+    this.validateConfig();
+
     if (this.config.enabled && this.config.apiKey) {
       this.initializeProvider();
+    }
+  }
+
+  private validateConfig(): void {
+    if (this.config.enabled) {
+      if (!this.config.apiKey) {
+        throw new AIConfigurationError('AI API key is required when AI is enabled');
+      }
+
+      if (this.config.maxTokens <= 0 || this.config.maxTokens > 10000) {
+        throw new AIConfigurationError('AI max tokens must be between 1 and 10000');
+      }
+
+      if (this.config.temperature < 0 || this.config.temperature > 1) {
+        throw new AIConfigurationError('AI temperature must be between 0 and 1');
+      }
+
+      const validProviders = ['openai', 'anthropic', 'huggingface'];
+      if (!validProviders.includes(this.config.provider)) {
+        throw new AIConfigurationError(`Invalid AI provider: ${this.config.provider}`);
+      }
     }
   }
 
@@ -106,7 +160,11 @@ Please respond in JSON format with the following structure:
           return JSON.parse(result) as AIAnalysisResult;
         } catch (error) {
           console.error('OpenAI analysis error:', error);
-          return this.getFallbackResult();
+          throw new AIProviderError(
+            'Failed to analyze content with OpenAI',
+            'openai',
+            error instanceof Error ? error : new Error(String(error))
+          );
         }
       }
     };
@@ -162,7 +220,11 @@ Respond in JSON format:
           return JSON.parse(result.text) as AIAnalysisResult;
         } catch (error) {
           console.error('Anthropic analysis error:', error);
-          return this.getFallbackResult();
+          throw new AIProviderError(
+            'Failed to analyze content with Anthropic',
+            'anthropic',
+            error instanceof Error ? error : new Error(String(error))
+          );
         }
       }
     };
@@ -187,14 +249,27 @@ Respond in JSON format:
     existingCategories: Category[]
   ): Promise<AIAnalysisResult> {
     if (!this.isEnabled()) {
-      throw new Error('AI service is not enabled or configured');
+      throw new AIConfigurationError('AI service is not enabled or configured');
     }
 
     if (!this.provider) {
-      throw new Error('AI provider not initialized');
+      throw new AIConfigurationError('AI provider not initialized');
     }
 
-    return await this.provider.analyze(content, existingCategories);
+    if (!content || content.trim().length === 0) {
+      throw new AIAnalysisError('Content cannot be empty');
+    }
+
+    try {
+      return await this.provider.analyze(content, existingCategories);
+    } catch (error) {
+      if (error instanceof AIProviderError) {
+        // For provider errors, return fallback result instead of throwing
+        console.warn(`AI provider error, using fallback: ${error.message}`);
+        return this.getFallbackResult();
+      }
+      throw error;
+    }
   }
 
   public async analyzeBookmark(
