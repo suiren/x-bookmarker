@@ -110,6 +110,18 @@ export const useSearchHistory = () => {
       .slice(0, limit);
   };
 
+  // Get recent searches for quick access
+  const getRecentSearches = (limit = 5) => {
+    return searchHistory.slice(0, limit).map(query => ({
+      id: crypto.randomUUID(),
+      query: query.text || '',
+      categoryIds: query.categoryIds || [],
+      tags: query.tags || [],
+      timestamp: new Date(query.searchedAt || Date.now()),
+      resultCount: 0, // This will be updated after actual search
+    }));
+  };
+
   return {
     data: searchHistory,
     searchHistory, // for backwards compatibility
@@ -118,5 +130,6 @@ export const useSearchHistory = () => {
     clearHistory,
     getPopularTags,
     getRecentSearchesByCategory,
+    getRecentSearches,
   };
 };

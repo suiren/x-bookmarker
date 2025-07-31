@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useSearchStore } from '../stores/searchStore';
 
 interface TagSuggestion {
   value: string;
@@ -39,6 +40,7 @@ interface SearchFacets {
   authors: AuthorSuggestion[];
 }
 
+// API-based suggestions (original functionality)
 export const useSearchSuggestions = (
   query: string,
   types: string[] = ['tags', 'categories', 'authors'],
@@ -76,6 +78,38 @@ export const useSearchSuggestions = (
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
+};
+
+// Simple text suggestions for search modal
+export const useSimpleSearchSuggestions = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const { setSuggestions, suggestions } = useSearchStore();
+
+  const getSuggestions = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      // ローカルの提案を生成（実際のプロジェクトではAPIから取得）
+      const localSuggestions = generateLocalSuggestions(query);
+      setSuggestions(localSuggestions);
+    } catch (error) {
+      console.error('Failed to get search suggestions:', error);
+      setSuggestions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setSuggestions]);
+
+  return {
+    getSuggestions,
+    suggestions,
+    isLoading,
+  };
 };
 
 export const usePopularSuggestions = (
@@ -127,6 +161,34 @@ export const useSearchFacets = (searchQuery: {
     gcTime: 5 * 60 * 1000, // 5 minutes
   });
 };
+
+// ローカル提案生成（実際のプロジェクトではAPIエンドポイントに置き換え）
+function generateLocalSuggestions(query: string): string[] {
+  const commonTerms = [
+    'AI', '機械学習', 'React', 'TypeScript', 'Node.js', 'Python',
+    '技術記事', 'チュートリアル', 'ニュース', '開発', 'プログラミング',
+    'デザイン', 'UI/UX', 'フロントエンド', 'バックエンド', 'データベース',
+    'セキュリティ', 'パフォーマンス', 'テスト', 'デプロイ', 'アーキテクチャ'
+  ];
+
+  const lowerQuery = query.toLowerCase();
+  
+  // マッチする項目をフィルタリング
+  const matches = commonTerms.filter(term => 
+    term.toLowerCase().includes(lowerQuery)
+  );
+
+  // 完全一致を優先し、部分一致を続ける
+  const exactMatches = matches.filter(term => 
+    term.toLowerCase().startsWith(lowerQuery)
+  );
+  
+  const partialMatches = matches.filter(term => 
+    !term.toLowerCase().startsWith(lowerQuery)
+  );
+
+  return [...exactMatches, ...partialMatches].slice(0, 8);
+}
 
 // Type exports for use in components
 export type {
