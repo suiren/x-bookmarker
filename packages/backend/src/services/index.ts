@@ -4,6 +4,7 @@ import { CategoryService } from './categoryService';
 import { SearchService } from './searchService';
 import { XApiClient } from './xApiClient';
 import { DatabaseService } from './databaseService';
+import { AIService } from './aiService';
 
 // Database instance
 const db = DatabaseService.getInstance();
@@ -20,10 +21,12 @@ export const bookmarkService = new BookmarkService(db as any, xApiClient);
 export const categoryService = new CategoryService();
 export const searchService = new SearchService();
 export const xApiService = xApiClient;
+export const aiService = new AIService();
 
 export {
   BookmarkService,
   CategoryService,
   SearchService,
   XApiClient,
+  AIService,
 };

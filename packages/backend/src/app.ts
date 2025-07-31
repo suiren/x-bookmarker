@@ -21,6 +21,7 @@ import { filesRouter } from './routes/files';
 import { backupRouter, setDatabase as setBackupDatabase } from './routes/backup';
 import { exportRouter, setDatabase as setExportDatabase } from './routes/export';
 import { importRouter, setDatabase as setImportDatabase } from './routes/import';
+import { aiRoutes } from './routes/ai';
 import { getBackupService } from './services/backupService';
 import { createRequiredDirectories } from './utils/createDirectories';
 
@@ -117,6 +118,9 @@ app.use('/api/backup', backupRouter);
 // Export/Import routes
 app.use('/api/export', exportRouter);
 app.use('/api/import', importRouter);
+
+// AI analysis routes
+app.use('/api/ai', aiRoutes);
 
 // Initialize backup service and start scheduled backups
 if (process.env.NODE_ENV !== 'test') {

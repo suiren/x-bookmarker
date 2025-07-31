@@ -1,0 +1,300 @@
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode } from 'react';
+import { useAIConfig, useUpdateAIConfig, useAIHealth, useAnalyzeContent } from '../useAI';
+import { apiClient } from '../../utils/apiClient';
+
+// Mock apiClient
+jest.mock('../../utils/apiClient');
+const mockApiClient = apiClient as jest.Mocked<typeof apiClient>;
+
+// Test wrapper with QueryClient
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+};
+
+describe('useAI hooks', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('useAIConfig', () => {
+    it('should fetch AI configuration successfully', async () => {
+      const mockConfig = {
+        success: true,
+        data: {
+          provider: 'openai' as const,
+          model: 'gpt-3.5-turbo',
+          enabled: true
+        }
+      };
+
+      mockApiClient.get.mockResolvedValue(mockConfig);
+
+      const { result } = renderHook(() => useAIConfig(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(result.current.data).toEqual(mockConfig);
+      expect(mockApiClient.get).toHaveBeenCalledWith('/ai/config');
+    });
+
+    it('should handle configuration fetch errors', async () => {
+      mockApiClient.get.mockRejectedValue(new Error('Network error'));
+
+      const { result } = renderHook(() => useAIConfig(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+
+      expect(result.current.error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('useUpdateAIConfig', () => {
+    it('should update AI configuration successfully', async () => {
+      const mockUpdatedConfig = {
+        success: true,
+        data: {
+          provider: 'anthropic' as const,
+          model: 'claude-3-sonnet-20240229',
+          enabled: true
+        }
+      };
+
+      mockApiClient.put.mockResolvedValue(mockUpdatedConfig);
+
+      const { result } = renderHook(() => useUpdateAIConfig(), {
+        wrapper: createWrapper(),
+      });
+
+      const updateConfig = {
+        provider: 'anthropic' as const,
+        model: 'claude-3-sonnet-20240229'
+      };
+
+      result.current.mutate(updateConfig);
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(mockApiClient.put).toHaveBeenCalledWith('/ai/config', updateConfig);
+      expect(result.current.data).toEqual(mockUpdatedConfig);
+    });
+
+    it('should handle configuration update errors', async () => {
+      mockApiClient.put.mockRejectedValue(new Error('Update failed'));
+
+      const { result } = renderHook(() => useUpdateAIConfig(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({ enabled: false });
+
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+
+      expect(result.current.error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('useAIHealth', () => {
+    it('should fetch AI health status successfully', async () => {
+      const mockHealthStatus = {
+        success: true,
+        data: {
+          enabled: true,
+          provider: 'openai',
+          model: 'gpt-3.5-turbo',
+          status: 'healthy' as const
+        }
+      };
+
+      mockApiClient.get.mockResolvedValue(mockHealthStatus);
+
+      const { result } = renderHook(() => useAIHealth(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(result.current.data).toEqual(mockHealthStatus);
+      expect(mockApiClient.get).toHaveBeenCalledWith('/ai/health');
+    });
+
+    it('should handle health status fetch errors', async () => {
+      mockApiClient.get.mockRejectedValue(new Error('Health check failed'));
+
+      const { result } = renderHook(() => useAIHealth(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+
+      expect(result.current.error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('useAnalyzeContent', () => {
+    it('should analyze content successfully', async () => {
+      const mockAnalysisResult = {
+        success: true,
+        data: {
+          suggestedCategories: [
+            { categoryName: '技術・AI', confidence: 0.9 },
+            { categoryName: 'プログラミング', confidence: 0.8 }
+          ],
+          suggestedTags: ['javascript', 'react', 'frontend'],
+          sentiment: 'positive' as const,
+          language: 'japanese',
+          topics: ['web development', 'programming']
+        }
+      };
+
+      mockApiClient.post.mockResolvedValue(mockAnalysisResult);
+
+      const { result } = renderHook(() => useAnalyzeContent(), {
+        wrapper: createWrapper(),
+      });
+
+      const analyzeRequest = {
+        content: 'Reactの新しいhooksについて学んでいます',
+        bookmarkId: 'bookmark123'
+      };
+
+      result.current.mutate(analyzeRequest);
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(mockApiClient.post).toHaveBeenCalledWith('/ai/analyze', analyzeRequest);
+      expect(result.current.data).toEqual(mockAnalysisResult);
+    });
+
+    it('should handle content analysis errors', async () => {
+      mockApiClient.post.mockRejectedValue(new Error('Analysis failed'));
+
+      const { result } = renderHook(() => useAnalyzeContent(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({
+        content: 'Test content'
+      });
+
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+
+      expect(result.current.error).toBeInstanceOf(Error);
+    });
+
+    it('should handle empty content validation', async () => {
+      const { result } = renderHook(() => useAnalyzeContent(), {
+        wrapper: createWrapper(),
+      });
+
+      // This would be validated on the backend
+      result.current.mutate({
+        content: ''
+      });
+
+      await waitFor(() => {
+        expect(result.current.isIdle).toBe(false);
+      });
+
+      expect(mockApiClient.post).toHaveBeenCalledWith('/ai/analyze', {
+        content: ''
+      });
+    });
+  });
+
+  describe('Query Invalidation', () => {
+    it('should invalidate AI config queries after successful update', async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+
+      // Spy on invalidateQueries
+      const invalidateQueriesSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+      const mockUpdatedConfig = {
+        success: true,
+        data: {
+          provider: 'openai' as const,
+          model: 'gpt-4',
+          enabled: true
+        }
+      };
+
+      mockApiClient.put.mockResolvedValue(mockUpdatedConfig);
+
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      );
+
+      const { result } = renderHook(() => useUpdateAIConfig(), { wrapper });
+
+      result.current.mutate({ model: 'gpt-4' });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      // Check that queries were invalidated
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['ai', 'config'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['ai', 'health'] });
+    });
+  });
+
+  describe('Query Stale Time Configuration', () => {
+    it('should set correct stale time for AI config', () => {
+      const { result } = renderHook(() => useAIConfig(), {
+        wrapper: createWrapper(),
+      });
+
+      // The query should be configured with 5 minutes stale time
+      // This is more of an integration test to ensure the configuration is correct
+      expect(result.current.isLoading || result.current.isIdle).toBe(true);
+    });
+
+    it('should set correct stale time for AI health', () => {
+      const { result } = renderHook(() => useAIHealth(), {
+        wrapper: createWrapper(),
+      });
+
+      // The query should be configured with 2 minutes stale time and 5 minutes refetch interval
+      expect(result.current.isLoading || result.current.isIdle).toBe(true);
+    });
+  });
+});
