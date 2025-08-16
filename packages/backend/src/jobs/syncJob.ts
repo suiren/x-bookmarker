@@ -186,10 +186,13 @@ class SyncJobManager {
         const bookmarkService = new BookmarkService(this.db, xApiClient);
 
         // Start sync process
-        const syncGenerator = bookmarkService.syncUserBookmarks(userId, config);
-
+        const generator = bookmarkService.syncUserBookmarks(userId, config);
+        
+        let finalResult: SyncJobResult | undefined;
         let lastStatus: SyncJobStatus | null = null;
-        for await (const status of syncGenerator) {
+        
+        // Process all status updates from the generator
+        for await (const status of generator) {
           lastStatus = status;
 
           // Update job progress
@@ -211,25 +214,47 @@ class SyncJobManager {
           }
         }
 
-        // Get final result
-        const result = await syncGenerator.return(undefined);
+        // The generator should have completed and returned a result
+        // Since we can't directly access the return value from a for-await loop,
+        // we need to manually call next() to get the return value
+        const generatorResult = await generator.next();
+        if (generatorResult.done && generatorResult.value) {
+          finalResult = generatorResult.value;
+        } else {
+          // Fallback: create result from last status
+          if (lastStatus) {
+            finalResult = {
+              success: lastStatus.status === 'completed',
+              jobId: job.id as string,
+              stats: {
+                ...lastStatus.stats,
+                duration: Date.now() - new Date(lastStatus.createdAt).getTime(),
+              },
+              error: lastStatus.error,
+            };
+          }
+        }
 
-        if (result.value?.success) {
+        if (!finalResult) {
+          throw new Error('Failed to get sync result from generator');
+        }
+
+        if (finalResult.success) {
           await this.updateJobStatus(
             job.id as string,
             'completed',
-            result.value.stats
+            finalResult.stats
           );
           console.log(`✅ Completed sync job ${job.id} for user ${userId}`);
-          return result.value;
+          return finalResult;
         } else {
           await this.updateJobStatus(
             job.id as string,
             'failed',
-            result.value?.stats,
-            result.value?.error
+            finalResult.stats,
+            finalResult.error
           );
-          throw new Error(result.value?.error?.message || 'Sync failed');
+          throw new Error(finalResult.error?.message || 'Sync failed');
         }
       } catch (error) {
         console.error(`❌ Sync job ${job.id} failed:`, error);
