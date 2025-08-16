@@ -41,4 +41,5 @@ const Layout = memo<LayoutProps>(({ children }) => {
 
 Layout.displayName = 'Layout';
 
+export { Layout };
 export default Layout;

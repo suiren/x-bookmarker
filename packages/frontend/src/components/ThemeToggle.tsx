@@ -102,4 +102,5 @@ const ThemeToggle = () => {
   );
 };
 
+export { ThemeToggle };
 export default ThemeToggle;

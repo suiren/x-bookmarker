@@ -18,7 +18,11 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "db:migrate": "npm run db:migrate --workspace=@x-bookmarker/backend",
-    "db:seed": "npm run db:seed --workspace=@x-bookmarker/backend"
+    "db:seed": "npm run db:seed --workspace=@x-bookmarker/backend",
+    "setup:env": "npm run setup:env --workspace=@x-bookmarker/backend",
+    "setup:check": "npm run setup:check --workspace=@x-bookmarker/backend",
+    "setup:full": "npm run setup:full --workspace=@x-bookmarker/backend",
+    "health": "npm run health --workspace=@x-bookmarker/backend"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.38.0",

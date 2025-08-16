@@ -134,3 +134,20 @@ export const useAuthState = () => {
     authCheck,
   };
 };
+
+// Main useAuth hook for common authentication operations
+export const useAuth = () => {
+  const { isAuthenticated, user, token } = useAuthStore();
+  const { data: authCheck, isLoading: isCheckingAuth } = useAuthCheck();
+  const logoutMutation = useLogout();
+
+  return {
+    isAuthenticated,
+    user,
+    token,
+    isCheckingAuth,
+    authCheck,
+    logout: logoutMutation.mutate,
+    isLoggingOut: logoutMutation.isPending,
+  };
+};

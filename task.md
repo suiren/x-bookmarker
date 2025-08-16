@@ -1,5 +1,47 @@
 # Implementation Plan
 
+## Phase 0: 開発環境セットアップ（実行前提条件）
+
+### 0. 開発環境初期化・動作確認
+
+- [ ] 0.1. 環境変数ファイル作成と設定 🔴（未実装）
+  - `.env.example`から`.env`ファイルを作成
+  - データベース接続設定（PostgreSQL、Redis）
+  - JWT秘密鍵の生成と設定
+  - X OAuth設定プレースホルダーの準備
+  - 基本的なサーバー設定（ポート、CORS等）
+  - _Requirements: 1, 8, 9_
+
+- [ ] 0.2. Docker環境起動と疎通確認 🔴（未実装）
+  - `docker-compose up -d`でPostgreSQL・Redis起動
+  - データベース接続確認（`npm run db:status`）
+  - Redis接続確認
+  - 依存サービスのヘルスチェック実装
+  - _Requirements: 6, 9_
+
+- [ ] 0.3. データベース初期化とシード実行 🔴（未実装）
+  - マイグレーション実行（`npm run db:migrate`）
+  - シードデータ投入（`npm run db:seed`）
+  - デフォルトカテゴリの作成確認
+  - データベーススキーマ検証
+  - _Requirements: 2, 6_
+
+- [ ] 0.4. 開発サーバー起動と疎通確認 🔴（未実装）
+  - バックエンドサーバー起動確認（`npm run dev:backend`）
+  - フロントエンドサーバー起動確認（`npm run dev:frontend`）
+  - API疎通テスト（ヘルスチェックエンドポイント）
+  - CORS設定確認
+  - 基本的なエラーハンドリング確認
+  - _Requirements: 5, 9_
+
+- [ ] 0.5. X OAuth設定ガイド作成 🔴（未実装）
+  - X Developer Portal設定手順ドキュメント
+  - OAuth認証フロー動作確認手順
+  - 環境変数設定ガイド
+  - トラブルシューティングガイド
+  - セキュリティ設定チェックリスト
+  - _Requirements: 1, 8_
+
 ## Phase 1: MVP (Minimum Viable Product)
 
 ### 1. 基盤整備とプロジェクト構造確立
