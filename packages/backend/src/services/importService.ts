@@ -455,7 +455,7 @@ class ImportService {
         skip_empty_lines: true,
         delimiter: ',',
       })
-        .on('readable', function() {
+        .on('readable', function(this: any) {
           let record;
           while (record = this.read()) {
             records.push(record);
@@ -663,20 +663,26 @@ class ImportService {
         columns: true,
         skip_empty_lines: true,
       })
-        .on('readable', function() {
+        .on('readable', function(this: any) {
           let record;
           while (record = this.read()) {
-            const normalizedData = this.normalizeBookmarkData(record, 'csv');
-            records.push({
-              originalData: record,
-              normalizedData,
-              status: 'imported',
-              hash: this.generateRecordHash(normalizedData),
-            });
+            records.push(record);
           }
         })
         .on('error', reject)
-        .on('end', () => resolve(records));
+        .on('end', (() => {
+          // Process records with proper class context
+          const processedRecords = records.map(record => {
+            const normalizedData = this.normalizeBookmarkData(record, 'csv');
+            return {
+              originalData: record,
+              normalizedData,
+              status: 'imported' as const,
+              hash: this.generateRecordHash(normalizedData),
+            };
+          });
+          resolve(processedRecords);
+        }).bind(this));
     });
   }
 

@@ -3,7 +3,7 @@
  * 接続プール最適化、パフォーマンス監視、ヘルスチェック機能
  */
 
-import { Pool, PoolClient, PoolConfig, QueryResult } from 'pg';
+import { Pool, PoolClient, PoolConfig, QueryResult, QueryResultRow } from 'pg';
 import { config } from '../config';
 
 interface ConnectionMetrics {
@@ -145,7 +145,7 @@ class OptimizedDatabaseManager {
   /**
    * 最適化されたクエリ実行
    */
-  async query<T = any>(
+  async query<T extends QueryResultRow = any>(
     text: string,
     params?: any[],
     client?: PoolClient

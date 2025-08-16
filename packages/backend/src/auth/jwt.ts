@@ -80,15 +80,15 @@ class JWTService {
   generateAccessToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
     console.log(`🎫 アクセストークン生成中: user=${payload.userId}`);
     
-    const options = {
-      expiresIn: this.config.accessTokenExpiry,
+    const options: SignOptions = {
+      expiresIn: this.config.accessTokenExpiry as string,
       issuer: this.config.issuer,
       audience: this.config.audience,
-      algorithm: 'HS256' as const,
+      algorithm: 'HS256',
       jwtid: `access_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };
 
-    return jwt.sign(payload as any, this.config.secret, options);
+    return jwt.sign(payload, this.config.secret, options);
   }
 
   /**
@@ -102,15 +102,15 @@ class JWTService {
   generateRefreshToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
     console.log(`🔄 リフレッシュトークン生成中: user=${payload.userId}`);
     
-    const options = {
-      expiresIn: this.config.refreshTokenExpiry,
+    const options: SignOptions = {
+      expiresIn: this.config.refreshTokenExpiry as string,
       issuer: this.config.issuer,
       audience: this.config.audience,
-      algorithm: 'HS256' as const,
+      algorithm: 'HS256',
       jwtid: `refresh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };
 
-    return jwt.sign(payload as any, this.config.secret, options);
+    return jwt.sign(payload, this.config.secret, options);
   }
 
   /**

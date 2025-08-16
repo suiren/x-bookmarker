@@ -24,12 +24,19 @@ interface Config {
     name: string;
     user: string;
     password: string;
+    maxConnections?: number;
+    minConnections?: number;
+    database?: string;
+    username?: string;
+    ssl?: boolean | object;
   };
   
   redis: {
     host: string;
     port: number;
     password?: string;
+    db?: number;
+    environment?: string;
   };
   
   jwt: {

@@ -5,7 +5,7 @@
  * コネクションプールを使用することで、効率的なデータベース接続を実現します。
  */
 
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { config } from '../config';
 
 /**
@@ -87,7 +87,7 @@ export async function closeDatabase(): Promise<void> {
  * @param params - パラメータ配列
  * @returns クエリ結果
  */
-export async function query<T = any>(
+export async function query<T extends QueryResultRow = any>(
   text: string, 
   params?: any[]
 ): Promise<QueryResult<T>> {

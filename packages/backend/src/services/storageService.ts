@@ -480,7 +480,7 @@ class StorageService {
               key,
               size: stats.size,
               contentType: this.getContentTypeFromExtension(key),
-              url: `${this.storageConfig.local.publicUrl}/${key}`,
+              url: `${this.storageConfig.local?.publicUrl || '/uploads'}/${key}`,
             });
           }
         }

@@ -189,7 +189,10 @@ class XApiClient {
             detail: 'Bearer token is invalid or expired',
             value: null
           };
-          throw new XApiRequestError(apiError.errors ? apiError : { ...apiError, errors: [] }, status);
+          throw new XApiRequestError(
+            'errors' in apiError ? apiError : { ...apiError, errors: [] }, 
+            status
+          );
         }
 
         // Handle authorization errors
@@ -201,7 +204,10 @@ class XApiClient {
             detail: 'Required scopes or permissions are missing',
             value: null
           };
-          throw new XApiRequestError(apiError.errors ? apiError : { ...apiError, errors: [] }, status);
+          throw new XApiRequestError(
+            'errors' in apiError ? apiError : { ...apiError, errors: [] }, 
+            status
+          );
         }
 
         // Handle other X API errors
@@ -421,10 +427,22 @@ class XApiClient {
       };
     };
 
-    return this.executeWithRetry(operation, {
-      maxAttempts: config.retryCount || this.config.retryAttempts,
-      useCircuitBreaker: config.useCircuitBreaker !== false,
-    });
+    // Execute operation with retry logic
+    for (let attempt = 1; attempt <= (config.retryCount || this.config.retryAttempts); attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (attempt === (config.retryCount || this.config.retryAttempts)) {
+          throw error;
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, this.config.retryDelay * attempt));
+      }
+    }
+    
+    // This should never be reached, but TypeScript requires it
+    throw new Error('Retry attempts exhausted');
   }
 
   /**
