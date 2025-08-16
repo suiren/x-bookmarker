@@ -14,7 +14,15 @@
     "format": "prettier --write src",
     "db:migrate": "tsx src/database/migrate.ts",
     "db:seed": "tsx src/database/seed.ts",
-    "db:reset": "tsx src/database/reset.ts"
+    "db:reset": "tsx src/database/reset.ts",
+    "setup:env": "tsx src/scripts/setup.ts env",
+    "setup:check": "tsx src/scripts/setup.ts check",
+    "setup:full": "tsx src/scripts/setup.ts full",
+    "health": "tsx src/scripts/health.ts",
+    "health:db": "tsx src/scripts/health.ts db",
+    "health:redis": "tsx src/scripts/health.ts redis",
+    "health:env": "tsx src/scripts/health.ts env",
+    "health:system": "tsx src/scripts/health.ts system"
   },
   "dependencies": {
     "express": "^4.18.2",
