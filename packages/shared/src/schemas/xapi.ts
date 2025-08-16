@@ -349,6 +349,8 @@ export const XApiClientConfigSchema = z.object({
   apiSecret: z.string().optional(),
   accessToken: z.string().optional(),
   accessTokenSecret: z.string().optional(),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
   baseURL: z.string().url().default('https://api.twitter.com/2'),
   timeout: z.number().int().min(1000).default(30000),
   retryAttempts: z.number().int().min(0).max(5).default(3),
