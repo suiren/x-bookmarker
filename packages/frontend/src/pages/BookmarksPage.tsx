@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, memo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Grid, List, Filter, Loader2, RefreshCw, Search } from 'lucide-react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -8,6 +8,7 @@ import { useCategories } from '../hooks/useCategories';
 import SearchModal from '../components/SearchModal';
 import BookmarkCard from '../components/BookmarkCard';
 import VirtualBookmarkList from '../components/VirtualBookmarkList';
+import { MobilePullToRefresh } from '../components/mobile/MobilePullToRefresh';
 import { bookmarksToFrontend, categoriesToFrontend } from '../utils/typeUtils';
 import { clsx } from 'clsx';
 import type { SearchQuery } from '../types';
@@ -31,7 +32,15 @@ const BookmarksPage = () => {
   const [page, setPage] = useState(1);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const limit = 20;
+
+  // モバイル画面サイズ検出
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // API queries
   const {
@@ -186,6 +195,11 @@ const BookmarksPage = () => {
     console.log('ブックマークアクション:', bookmarkId);
   }, []);
 
+  // プルトゥリフレッシュ処理
+  const handlePullToRefresh = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+
   // Remove duplicate hasActiveSearch declaration (already exists above with useMemo)
 
   // Loading state
@@ -224,9 +238,8 @@ const BookmarksPage = () => {
     );
   }
 
-  return (
-    <DndProvider backend={HTML5Backend}>
-      <div className="space-y-6">
+  const PageContent = () => (
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -389,7 +402,7 @@ const BookmarksPage = () => {
         totalCount > 100 ? (
           // Use virtual scrolling for large datasets (>100 items)
           <VirtualBookmarkList
-            bookmarks={bookmarks}
+            bookmarks={bookmarks as any}
             height={600}
             itemHeight={viewMode === 'grid' ? 280 : 180}
             viewMode={viewMode}
@@ -457,7 +470,22 @@ const BookmarksPage = () => {
           onSearch={handleSearch}
           initialQuery={currentSearchQuery}
         />
-      </div>
+    </div>
+  );
+
+  return (
+    <DndProvider backend={HTML5Backend}>
+      {isMobile ? (
+        <MobilePullToRefresh 
+          onRefresh={handlePullToRefresh}
+          enabled={true}
+          threshold={80}
+        >
+          <PageContent />
+        </MobilePullToRefresh>
+      ) : (
+        <PageContent />
+      )}
     </DndProvider>
   );
 };

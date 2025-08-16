@@ -2,10 +2,10 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
 import { useAIConfig, useUpdateAIConfig, useAIHealth, useAnalyzeContent } from '../useAI';
-import { apiClient } from '../../utils/apiClient';
+import { apiClient } from '../../lib/api';
 
 // Mock apiClient
-jest.mock('../../utils/apiClient');
+jest.mock('../../lib/api');
 const mockApiClient = apiClient as jest.Mocked<typeof apiClient>;
 
 // Test wrapper with QueryClient
